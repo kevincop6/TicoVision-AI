@@ -39,9 +39,3 @@ Para compilar y correr este proyecto en tu entorno local, necesitás:
 1.  **Android Studio** (Versión más reciente recomendada: Iguana o superior).
 2.  **SDK de Android:** API Level 24 (Min) hasta API Level 34 (Target).
 3.  Un dispositivo físico o emulador con al menos 4GB de RAM asignada para manejar el procesamiento de video y modelos de IA.
-
-### Pasos para ejecutar:
-
-1. Cloná el repositorio:
-   ```bash
-   git clone [https://github.com/tu-usuario/ticovision-ai.git](https://github.com/tu-usuario/ticovision-ai.git)
