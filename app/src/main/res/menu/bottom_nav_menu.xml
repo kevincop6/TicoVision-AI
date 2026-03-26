@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_home"
+        android:title="@string/menu_home"
+        android:icon="@drawable/ic_home" />
+    <item
+        android:id="@+id/action_effects"
+        android:title="@string/menu_effects"
+        android:icon="@drawable/ic_effects" />
+    <item
+        android:id="@+id/action_audio"
+        android:title="@string/menu_audio"
+        android:icon="@drawable/ic_audio" />
+    <item
+        android:id="@+id/action_text"
+        android:title="@string/menu_text"
+        android:icon="@drawable/ic_text" />
+    <item
+        android:id="@+id/action_export"
+        android:title="@string/menu_export"
+        android:icon="@drawable/ic_export" />
+</menu>

@@ -1,3 +1,18 @@
 <resources>
     <string name="app_name">TicoVision-AI</string>
+    <!-- Descripciones de accesibilidad (contentDescription) -->
+    <string name="desc_preview">Previsualización del video</string>
+    <string name="desc_play">Reproducir video</string>
+    <string name="desc_open_gallery">Abrir galería de videos</string>
+    <string name="desc_add_clip">Añadir nuevo clip</string>
+
+    <!-- Textos de la interfaz -->
+    <string name="timeline_no_clips">Toca el botón + para añadir clip</string>
+
+    <!-- Menú inferior -->
+    <string name="menu_home">Inicio</string>
+    <string name="menu_effects">Efectos</string>
+    <string name="menu_audio">Audio</string>
+    <string name="menu_text">Texto</string>
+    <string name="menu_export">Exportar</string>
 </resources>
