@@ -1,141 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/black"
-    tools:context=".MainActivity">
+    android:background="@drawable/bg_main">
 
-    <!-- Toolbar superior con estilo Material Design 3 -->
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/appBarLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:elevation="0dp"
-        app:elevation="0dp"
-        android:background="@android:color/transparent">
-
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="@android:color/transparent"
-            app:title="@string/app_name"
-            app:titleTextColor="@android:color/white"
-            app:layout_scrollFlags="scroll|enterAlways"
-            android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar" />
-
-    </com.google.android.material.appbar.AppBarLayout>
-
-    <!-- Contenido principal: área de previsualización y controles -->
-    <RelativeLayout
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/mainFragmentContainer"
+        android:name="com.ulpro.ticovision_ai.ui.home.HomeFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginBottom="80dp"
-        android:padding="16dp"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        tools:layout="@layout/fragment_home" />
 
-        <!-- Zona de previsualización de video (vista simulada) -->
-        <FrameLayout
-            android:id="@+id/previewContainer"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_centerVertical="true"
-            android:layout_marginBottom="16dp"
-            android:background="@android:color/darker_gray"
-            android:layout_above="@+id/timeline"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toTopOf="@id/timeline">
-
-            <ImageView
-                android:id="@+id/previewCover"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="centerCrop"
-                android:src="@drawable/ic_preview"
-                android:contentDescription="@string/desc_preview" />
-
-            <ImageButton
-                android:id="@+id/btnPlay"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:layout_gravity="center"
-                android:background="@drawable/btn_rounded_circle"
-                android:src="@drawable/ic_play"
-                android:contentDescription="@string/desc_play" />
-        </FrameLayout>
-
-        <!-- Línea de tiempo (Timeline) de clips -->
-        <LinearLayout
-            android:id="@+id/timeline"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
-            android:layout_marginBottom="16dp"
-            android:background="@drawable/rounded_bg_dark"
-            android:padding="12dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <ImageButton
-                android:id="@+id/btnAddClip"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="12dp"
-                android:background="@drawable/selector_btn_ripple"
-                android:src="@drawable/ic_clip"
-                android:scaleType="centerInside"
-                android:contentDescription="@string/desc_add_clip" />
-
-            <TextView
-                android:id="@+id/timelinePlaceholder"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/timeline_no_clips"
-                android:textColor="@android:color/white"
-                android:textSize="14sp"
-                android:gravity="center_vertical" />
-
-        </LinearLayout>
-
-    </RelativeLayout>
-
-    <!-- Bottom Navigation: pestañas de herramientas -->
-    <com.google.android.material.bottomappbar.BottomAppBar
-        android:id="@+id/bottomAppBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:backgroundTint="@color/primary"
-        app:fabCradleMargin="8dp"
-        app:liftOnScroll="true"
-        app:layout_behavior="com.google.android.material.behavior.HideBottomViewOnScrollBehavior">
-
-        <com.google.android.material.bottomnavigation.BottomNavigationView
-            android:id="@+id/bottomNav"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"
-            app:labelVisibilityMode="labeled"
-            app:menu="@menu/bottom_nav_menu" />
-
-    </com.google.android.material.bottomappbar.BottomAppBar>
-
-    <!-- FAB para abrir galería y cargar video -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fab"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
-        android:src="@drawable/ic_video"
-        android:backgroundTint="@color/secondary"
-        android:contentDescription="@string/desc_open_gallery"
-        app:layout_anchor="@id/bottomAppBar"
-        app:layout_anchorGravity="bottom|end" />
-
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

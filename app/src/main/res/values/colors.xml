@@ -1,39 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-    <!-- Color primario: botones y acentos principales -->
-    <color name="primary">#FF5722</color>            <!-- Naranja vibrante -->
-    <color name="primary_variant">#E64A19</color>   <!-- Primario más oscuro -->
-    <color name="on_primary">#FFFFFF</color>       <!-- Texto/ícono sobre primario -->
+<resources xmlns:android="http://schemas.android.com/apk/res/android">
+    <color name="app_background">#050505</color>
+    <color name="quick_action_bg">#181818</color>
+    <color name="premium_chip_bg">#212529</color>
+    <color name="premium_chip_border">#32373C</color>
+    <color name="card_light">#D8E4E4</color>
+    <color name="version_badge_bg">#FF8612</color>
+    <color name="version_badge_text">#472300</color>
+    <color name="outline_stroke">#7E868E</color>
+    <color name="dashed_circle">#8B949B</color>
+    <color name="project_item_bg">#151515</color>
 
-    <!-- Color secundario: botones menos prominentes e íconos -->
-    <color name="secondary">#03A9F4</color>        <!-- Azul cian suave -->
-    <color name="secondary_variant">#0288D1</color>
-    <color name="on_secondary">#FFFFFF</color>
-
-    <!-- Fondo y superficie oscura (vídeo y áreas principales) -->
-    <color name="background">#121212</color>       <!-- Fondo general muy oscuro -->
-    <color name="surface">#1E1E1E</color>         <!-- Superficie contenedora -->
-    <color name="surface_dark">#121212</color>    <!-- Fondo aún más oscuro (ej. línea de tiempo) -->
-    <color name="surface_variant">#2C2C2C</color> <!-- Superficie ligeramente más clara -->
-    <color name="on_surface_dark">#FFFFFF</color> <!-- Texto sobre superficie muy oscura -->
-    <color name="on_surface_variant">#CCCCCC</color> <!-- Texto secundario -->
-
-    <!-- Error y estados -->
-    <color name="error">#FF1744</color>
-    <color name="on_error">#FFFFFF</color>
-
-    <!-- Extras para tu diseño -->
-    <color name="text_primary">#FFFFFF</color>   <!-- Texto principal -->
-    <color name="text_secondary">#B3B3B3</color> <!-- Texto secundario -->
-
-    <!-- Si usas Material 3 directamente, puedes igualar a roles M3 -->
-    <color name="colorPrimary">#FF5722</color>
-    <color name="colorOnPrimary">#FFFFFF</color>
-    <color name="colorSecondary">#03A9F4</color>
-    <color name="colorOnSecondary">#FFFFFF</color>
-    <color name="colorSurface">#1E1E1E</color>
-    <color name="colorOnSurface">#FFFFFF</color>
-    <color name="colorBackground">#121212</color>
+    <color name="text_primary">#F5F5F5</color>
+    <color name="text_secondary">#B1B1B1</color>
+    <color name="text_meta">#8B8B8B</color>
+    <color name="text_dark">#121212</color>
+    <color name="text_muted_dark">#727D83</color>
+    <color name="icon_primary">#EDEDED</color>
 </resources>
