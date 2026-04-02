@@ -51,32 +51,20 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     }
 
     private fun setupQuickActions() {
-        binding.cardAiEditor.setOnClickListener {
-            Toast.makeText(requireContext(), "AI editor", Toast.LENGTH_SHORT).show()
-        }
-
         binding.cardPhotoEditor.setOnClickListener {
-            Toast.makeText(requireContext(), "Photo editor", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), R.string.photo_editor, Toast.LENGTH_SHORT).show()
         }
 
         binding.cardVideoEditor.setOnClickListener {
-            Toast.makeText(requireContext(), "Video editor", Toast.LENGTH_SHORT).show()
-        }
-
-        binding.cardMoreOptions.setOnClickListener {
-            Toast.makeText(requireContext(), "More options", Toast.LENGTH_SHORT).show()
-        }
-
-        binding.btnPremium.setOnClickListener {
-            Toast.makeText(requireContext(), "Get premium", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), R.string.video_editor, Toast.LENGTH_SHORT).show()
         }
 
         binding.btnSettings.setOnClickListener {
-            Toast.makeText(requireContext(), "Settings", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), R.string.settings, Toast.LENGTH_SHORT).show()
         }
 
         binding.btnCreateProject.setOnClickListener {
-            Toast.makeText(requireContext(), "Nuevo proyecto", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), R.string.new_project, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -137,16 +125,12 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.menu_home -> true
-                R.id.menu_media -> {
-                    Toast.makeText(requireContext(), "Media", Toast.LENGTH_SHORT).show()
-                    true
-                }
                 R.id.menu_files -> {
-                    Toast.makeText(requireContext(), "Files", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), R.string.files, Toast.LENGTH_SHORT).show()
                     true
                 }
-                R.id.menu_profile -> {
-                    Toast.makeText(requireContext(), "Profile", Toast.LENGTH_SHORT).show()
+                R.id.settings -> {
+                    Toast.makeText(requireContext(), R.string.settings, Toast.LENGTH_SHORT).show()
                     true
                 }
                 else -> false
