@@ -2,115 +2,55 @@ package com.ulpro.ticovision_ai.ui.home
 
 import android.os.Bundle
 import android.view.View
-import android.widget.Toast
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.ulpro.ticovision_ai.R
+import com.ulpro.ticovision_ai.data.local.entity.ProjectEntity
 import com.ulpro.ticovision_ai.databinding.FragmentHomeBinding
+import com.ulpro.ticovision_ai.ui.dialog.CreateProjectDialogFragment
+import com.ulpro.ticovision_ai.ui.editor.VideoEditorActivity
+import kotlinx.coroutines.launch
 
+/**
+ * Fragment principal de la pantalla Home.
+ * Se encarga de inicializar la lista de proyectos,
+ * escuchar cambios del ViewModel y abrir el diálogo de creación.
+ */
 class HomeFragment : Fragment(R.layout.fragment_home) {
 
     private var _binding: FragmentHomeBinding? = null
     private val binding get() = _binding!!
 
+    private val viewModel: HomeViewModel by viewModels {
+        HomeViewModelFactory(requireContext().applicationContext)
+    }
+
     private lateinit var projectsAdapter: ProjectsAdapter
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
         _binding = FragmentHomeBinding.bind(view)
 
-        setupInsets()
-        setupQuickActions()
-        setupProjectsList()
-        setupBottomNavigation()
+        setupRecycler()
+        setupClicks()
+        observeProjects()
     }
 
-    private fun setupInsets() {
-        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-
-            binding.headerContainer.setPadding(
-                binding.headerContainer.paddingLeft,
-                systemBars.top + binding.headerContainer.paddingTop,
-                binding.headerContainer.paddingRight,
-                binding.headerContainer.paddingBottom
-            )
-
-            binding.bottomNavigation.setPadding(
-                binding.bottomNavigation.paddingLeft,
-                binding.bottomNavigation.paddingTop,
-                binding.bottomNavigation.paddingRight,
-                systemBars.bottom + resources.getDimensionPixelSize(R.dimen.bottom_nav_extra_padding)
-            )
-
-            insets
-        }
-    }
-
-    private fun setupQuickActions() {
-        binding.cardPhotoEditor.setOnClickListener {
-            Toast.makeText(requireContext(), R.string.photo_editor, Toast.LENGTH_SHORT).show()
-        }
-
-        binding.cardVideoEditor.setOnClickListener {
-            Toast.makeText(requireContext(), R.string.video_editor, Toast.LENGTH_SHORT).show()
-        }
-
-        binding.btnSettings.setOnClickListener {
-            Toast.makeText(requireContext(), R.string.settings, Toast.LENGTH_SHORT).show()
-        }
-
-        binding.btnCreateProject.setOnClickListener {
-            Toast.makeText(requireContext(), R.string.new_project, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun setupProjectsList() {
-        val projects = listOf(
-            Project(
-                title = "Project 981",
-                subtitle = "Mistery template",
-                date = "12 Jan 25",
-                duration = "00:01:12",
-                size = "44MB",
-                imageRes = R.drawable.default_project_1
-            ),
-            Project(
-                title = "My daily lifestyle",
-                subtitle = "Car star",
-                date = "19 Dec 24",
-                duration = "00:58:45",
-                size = "37MB",
-                imageRes = R.drawable.default_project_1
-            ),
-            Project(
-                title = "Friday_01",
-                subtitle = "Morning Coffee Vibe",
-                date = "13 Dec 24",
-                duration = "00:01:41",
-                size = "52MB",
-                imageRes = R.drawable.default_project_1
-            ),
-            Project(
-                title = "My day",
-                subtitle = "Urban travel reel",
-                date = "03 Dec 24",
-                duration = "00:00:58",
-                size = "18MB",
-                imageRes = R.drawable.default_project_1
-            )
-        )
-
+    /**
+     * Configura el RecyclerView con un LinearLayoutManager vertical
+     * y conecta el adapter que renderiza la lista de proyectos.
+     */
+    private fun setupRecycler() {
         projectsAdapter = ProjectsAdapter(
-            items = projects,
-            onMenuClick = { project ->
-                Toast.makeText(requireContext(), "Opciones: ${project.title}", Toast.LENGTH_SHORT).show()
+            onProjectClick = { project ->
+                openProject(project)
             },
-            onItemClick = { project ->
-                Toast.makeText(requireContext(), "Abrir: ${project.title}", Toast.LENGTH_SHORT).show()
+            onProjectMoreClick = { project ->
+                showProjectOptions(project)
             }
         )
 
@@ -121,23 +61,51 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         }
     }
 
-    private fun setupBottomNavigation() {
-        binding.bottomNavigation.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.menu_home -> true
-                R.id.menu_files -> {
-                    Toast.makeText(requireContext(), R.string.files, Toast.LENGTH_SHORT).show()
-                    true
+    /**
+     * Configura los eventos de clic de la pantalla.
+     * El botón principal abre el diálogo para crear un proyecto nuevo.
+     */
+    private fun setupClicks() {
+        binding.btnCreateProject.setOnClickListener {
+            CreateProjectDialogFragment().show(
+                parentFragmentManager,
+                CreateProjectDialogFragment.TAG
+            )
+        }
+    }
+
+    /**
+     * Observa la lista de proyectos usando el ciclo de vida de la vista.
+     * Esto evita fugas de memoria y actualiza la UI solo cuando la vista está activa.
+     */
+    private fun observeProjects() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.projects.collect { projectList ->
+                    projectsAdapter.submitList(projectList)
                 }
-                R.id.settings -> {
-                    Toast.makeText(requireContext(), R.string.settings, Toast.LENGTH_SHORT).show()
-                    true
-                }
-                else -> false
             }
         }
+    }
 
-        binding.bottomNavigation.selectedItemId = R.id.menu_home
+    /**
+     * Abre un proyecto existente.
+     * Más adelante aquí navegarás a la pantalla del editor.
+     */
+    private fun openProject(project: ProjectEntity) {
+        startActivity(
+            VideoEditorActivity.createIntent(
+                requireContext(),
+                project.id
+            )
+        )
+    }
+    /**
+     * Muestra opciones adicionales de un proyecto.
+     * Más adelante aquí podrás agregar acciones como renombrar o eliminar.
+     */
+    private fun showProjectOptions(project: ProjectEntity) {
+        // TODO: Mostrar menú de opciones del proyecto
     }
 
     override fun onDestroyView() {

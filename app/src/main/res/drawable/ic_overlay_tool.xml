@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,6.5
+                          C4,5.67 4.67,5 5.5,5
+                          H18.5
+                          C19.33,5 20,5.67 20,6.5
+                          V15.5
+                          C20,16.33 19.33,17 18.5,17
+                          H5.5
+                          C4.67,17 4,16.33 4,15.5
+                          Z" />
+
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M13.5,11.5
+                          H18
+                          C18.55,11.5 19,11.95 19,12.5
+                          V16.5
+                          C19,17.05 18.55,17.5 18,17.5
+                          H13.5
+                          C12.95,17.5 12.5,17.05 12.5,16.5
+                          V12.5
+                          C12.5,11.95 12.95,11.5 13.5,11.5
+                          Z" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8,8.4
+                          H13.2
+                          C13.53,8.4 13.8,8.67 13.8,9
+                          C13.8,9.33 13.53,9.6 13.2,9.6
+                          H8
+                          C7.67,9.6 7.4,9.33 7.4,9
+                          C7.4,8.67 7.67,8.4 8,8.4
+                          Z" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8,11
+                          H10.8
+                          C11.13,11 11.4,11.27 11.4,11.6
+                          C11.4,11.93 11.13,12.2 10.8,12.2
+                          H8
+                          C7.67,12.2 7.4,11.93 7.4,11.6
+                          C7.4,11.27 7.67,11 8,11
+                          Z" />
+
+</vector>
