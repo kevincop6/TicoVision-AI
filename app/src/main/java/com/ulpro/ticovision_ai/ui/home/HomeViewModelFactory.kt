@@ -19,7 +19,8 @@ class HomeViewModelFactory(
             val database = TicoVisionDatabase.getInstance(context)
             val repository = ProjectRepository(
                 projectDao = database.projectDao(),
-                projectEditDao = database.projectEditDao()
+                projectEditDao = database.projectEditDao(),
+                timelineItemDao = database.timelineItemDao()
             )
             return HomeViewModel(repository) as T
         }
