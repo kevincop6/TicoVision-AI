@@ -68,6 +68,27 @@ class HomeViewModel(
     }
 
     /**
+     * Actualiza los datos básicos de un proyecto.
+     */
+    fun updateProject(
+        projectId: Long,
+        title: String,
+        subtitle: String
+    ) {
+        viewModelScope.launch {
+            try {
+                repository.updateProjectBasicInfo(
+                    projectId = projectId,
+                    title = title,
+                    subtitle = subtitle
+                )
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "No se pudo actualizar el proyecto."
+            }
+        }
+    }
+
+    /**
      * Elimina un proyecto existente.
      */
     fun deleteProject(projectId: Long) {

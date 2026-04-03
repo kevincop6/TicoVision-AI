@@ -1,26 +1,26 @@
 package com.ulpro.ticovision_ai.ui.home
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.ulpro.ticovision_ai.data.local.entity.ProjectEntity
 import com.ulpro.ticovision_ai.databinding.ItemProjectBinding
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 /**
  * Adapter de proyectos para la pantalla Home.
- * Usa ListAdapter para aprovechar DiffUtil y actualizar
- * la lista de manera eficiente cuando cambian los datos.
  */
 class ProjectsAdapter(
     private val onProjectClick: (ProjectEntity) -> Unit,
-    private val onProjectMoreClick: (ProjectEntity) -> Unit
+    private val onProjectMoreClick: (View, ProjectEntity) -> Unit
 ) : ListAdapter<ProjectEntity, ProjectsAdapter.ProjectViewHolder>(DiffCallback) {
 
-    /**
-     * Crea el ViewHolder inflando el layout del item.
-     */
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ProjectViewHolder {
         val binding = ItemProjectBinding.inflate(
             LayoutInflater.from(parent.context),
@@ -30,57 +30,59 @@ class ProjectsAdapter(
         return ProjectViewHolder(binding)
     }
 
-    /**
-     * Vincula los datos del proyecto actual con la vista.
-     */
     override fun onBindViewHolder(holder: ProjectViewHolder, position: Int) {
         holder.bind(getItem(position))
     }
 
-    /**
-     * ViewHolder del item de proyecto.
-     */
     inner class ProjectViewHolder(
         private val binding: ItemProjectBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        /**
-         * Asigna la información del proyecto a las vistas del item
-         * y conecta los eventos de clic.
-         */
         fun bind(project: ProjectEntity) {
             binding.tvProjectTitle.text = project.title
-            binding.tvProjectSubtitle.text = project.subtitle
+            binding.tvProjectSubtitle.text = buildSubtitle(project)
 
             binding.root.setOnClickListener {
                 onProjectClick(project)
             }
 
             binding.btnProjectMore.setOnClickListener {
-                onProjectMoreClick(project)
+                onProjectMoreClick(it, project)
             }
+        }
+
+        /**
+         * Construye un subtítulo amigable para mostrar fecha y duración.
+         */
+        private fun buildSubtitle(project: ProjectEntity): String {
+            val dateText = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                .format(Date(project.updatedAt))
+
+            val durationText = formatDuration(project.durationMs)
+
+            return "${project.subtitle} • $dateText • $durationText"
+        }
+
+        /**
+         * Convierte milisegundos a un texto legible.
+         */
+        private fun formatDuration(durationMs: Long): String {
+            val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(durationMs)
+            val minutes = totalSeconds / 60
+            val seconds = totalSeconds % 60
+            return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
         }
     }
 
-    /**
-     * DiffUtil compara elementos para que RecyclerView
-     * actualice solo los cambios necesarios.
-     */
     private object DiffCallback : DiffUtil.ItemCallback<ProjectEntity>() {
 
-        /**
-         * Verifica si dos items representan el mismo proyecto.
-         */
         override fun areItemsTheSame(
             oldItem: ProjectEntity,
             newItem: ProjectEntity
         ): Boolean {
-            return oldItem.id == newItem.id
+            return oldItem.projectId == newItem.projectId
         }
 
-        /**
-         * Verifica si el contenido completo del proyecto cambió.
-         */
         override fun areContentsTheSame(
             oldItem: ProjectEntity,
             newItem: ProjectEntity

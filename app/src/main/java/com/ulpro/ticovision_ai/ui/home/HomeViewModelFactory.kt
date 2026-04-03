@@ -23,6 +23,7 @@ class HomeViewModelFactory(
             )
             return HomeViewModel(repository) as T
         }
+
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }

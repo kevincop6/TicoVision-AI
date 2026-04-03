@@ -31,7 +31,6 @@ class CreateProjectDialogFragment : DialogFragment() {
             .create()
 
         dialog.setCanceledOnTouchOutside(true)
-
         setupListeners()
 
         return dialog

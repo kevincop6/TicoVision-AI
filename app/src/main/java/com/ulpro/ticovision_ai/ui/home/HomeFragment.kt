@@ -2,6 +2,8 @@ package com.ulpro.ticovision_ai.ui.home
 
 import android.os.Bundle
 import android.view.View
+import android.widget.PopupMenu
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -17,8 +19,6 @@ import kotlinx.coroutines.launch
 
 /**
  * Fragment principal de la pantalla Home.
- * Se encarga de inicializar la lista de proyectos,
- * escuchar cambios del ViewModel y abrir el diálogo de creación.
  */
 class HomeFragment : Fragment(R.layout.fragment_home) {
 
@@ -38,19 +38,19 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         setupRecycler()
         setupClicks()
         observeProjects()
+        observeErrors()
     }
 
     /**
-     * Configura el RecyclerView con un LinearLayoutManager vertical
-     * y conecta el adapter que renderiza la lista de proyectos.
+     * Configura el RecyclerView.
      */
     private fun setupRecycler() {
         projectsAdapter = ProjectsAdapter(
             onProjectClick = { project ->
                 openProject(project)
             },
-            onProjectMoreClick = { project ->
-                showProjectOptions(project)
+            onProjectMoreClick = { anchorView, project ->
+                showProjectOptions(anchorView, project)
             }
         )
 
@@ -62,21 +62,19 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     }
 
     /**
-     * Configura los eventos de clic de la pantalla.
-     * El botón principal abre el diálogo para crear un proyecto nuevo.
+     * Configura eventos de clic.
      */
     private fun setupClicks() {
         binding.btnCreateProject.setOnClickListener {
             CreateProjectDialogFragment().show(
-                parentFragmentManager,
+                childFragmentManager,
                 CreateProjectDialogFragment.TAG
             )
         }
     }
 
     /**
-     * Observa la lista de proyectos usando el ciclo de vida de la vista.
-     * Esto evita fugas de memoria y actualiza la UI solo cuando la vista está activa.
+     * Observa la lista de proyectos.
      */
     private fun observeProjects() {
         viewLifecycleOwner.lifecycleScope.launch {
@@ -89,23 +87,49 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     }
 
     /**
+     * Observa errores para mostrarlos en pantalla.
+     */
+    private fun observeErrors() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.errorMessage.collect { message ->
+                    if (!message.isNullOrBlank()) {
+                        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+                        viewModel.clearError()
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Abre un proyecto existente.
-     * Más adelante aquí navegarás a la pantalla del editor.
      */
     private fun openProject(project: ProjectEntity) {
         startActivity(
             VideoEditorActivity.createIntent(
                 requireContext(),
-                project.id
+                project.projectId
             )
         )
     }
+
     /**
-     * Muestra opciones adicionales de un proyecto.
-     * Más adelante aquí podrás agregar acciones como renombrar o eliminar.
+     * Muestra opciones adicionales del proyecto.
      */
-    private fun showProjectOptions(project: ProjectEntity) {
-        // TODO: Mostrar menú de opciones del proyecto
+    private fun showProjectOptions(anchorView: View, project: ProjectEntity) {
+        val popupMenu = PopupMenu(requireContext(), anchorView)
+        popupMenu.menu.add(0, 1, 0, "Eliminar proyecto")
+        popupMenu.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> {
+                    viewModel.deleteProject(project.projectId)
+                    true
+                }
+                else -> false
+            }
+        }
+        popupMenu.show()
     }
 
     override fun onDestroyView() {
