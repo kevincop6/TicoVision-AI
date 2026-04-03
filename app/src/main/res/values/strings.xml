@@ -1,3 +1,85 @@
 <resources>
     <string name="app_name">TicoVision-AI</string>
+    <!-- Descripciones de accesibilidad (contentDescription) -->
+    <string name="desc_preview">Previsualización del video</string>
+    <string name="desc_play">Reproducir video</string>
+    <string name="desc_open_gallery">Abrir galería de videos</string>
+    <string name="desc_add_clip">Añadir nuevo clip</string>
+
+    <!-- Textos de la interfaz -->
+    <string name="timeline_no_clips">Toca el botón + para añadir clip</string>
+
+    <!-- Menú inferior -->
+    <string name="menu_home">Inicio</string>
+    <string name="menu_effects">Efectos</string>
+    <string name="menu_audio">Audio</string>
+    <string name="menu_text">Texto</string>
+    <string name="menu_export">Exportar</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="get_premium">Get premium</string>
+    <string name="more_options">Más opciones</string>
+    <string name="settings">Ajustes</string>
+    <string name="projects">PROYECTOS</string>
+    <string name="version_0_0_1_alpha">Version 0.0.1-alpha</string>
+    <string name="_2_projects_left">2 projects left</string>
+    <string name="trial_version">Trial version</string>
+    <string name="new_project">NUEVO PROYECTO</string>
+    <string name="video_editor">Editor Vídeo</string>
+    <string name="photo_editor">Editor Fotos</string>
+    <string name="ai_editor">AI editor</string>
+    <string name="edit">EDIT+</string>
+    <string name="home">Home</string>
+    <string name="files">Files</string>
+    <string name="desc_create_project">Crear nuevo proyecto</string>
+    <string name="desc_main_navigation">Navegación principal</string>
+    <string name="desc_open_app_settings">Abrir configuración de la aplicación</string>
+    <string name="project_title">Título</string>
+    <string name="project_title_hint">Escribe el título del proyecto</string>
+    <string name="project_subtitle">Descripción</string>
+    <string name="project_subtitle_hint">Escribe la descripción del proyecto</string>
+    <string name="cancel">Cancelar</string>
+    <string name="create">Crear</string>
+    <string name="error_project_title_required">Ingresa el título del proyecto</string>
+    <string name="error_project_subtitle_required">Ingresa la descripción del proyecto</string>
+    <string name="project_options">Opciones del proyecto</string>
+
+    <string name="back">Atrás</string>
+    <string name="my_project">Mi proyecto</string>
+    <string name="export">Exportar</string>
+    <string name="mute">Silenciar</string>
+    <string name="play">Reproducir</string>
+    <string name="undo">Deshacer</string>
+    <string name="redo">Rehacer</string>
+    <string name="add">Añadir</string>
+    <string name="audio">Audio</string>
+    <string name="text">Texto</string>
+    <string name="animate">Animar</string>
+    <string name="effects">Efectos</string>
+    <string name="shapes">Formas</string>
+    <string name="pip">PIP</string>
+    <string name="action_shape_added">Forma añadida</string>
+    <string name="action_blur_deleted">Efecto desenfoque eliminado</string>
+    <string name="time_current_sample">00:02:23</string>
+    <string name="time_total_sample">00:02:43</string>
+    <string name="audio_track_sample">Audio: The Cars - Heartbeat City</string>
+
+    <string name="msg_project_options">Opciones del proyecto</string>
+    <string name="msg_export_pending">La exportación está pendiente de implementación</string>
+    <string name="msg_volume_pending">El control de volumen está pendiente</string>
+    <string name="msg_playback_pending">La reproducción con Media3 está pendiente</string>
+    <string name="msg_undo_pending">La función deshacer está pendiente</string>
+    <string name="msg_redo_pending">La función rehacer está pendiente</string>
+    <string name="msg_add_track_pending">La opción de agregar pista está pendiente</string>
+
+    <string name="msg_tool_edit">Herramienta editar</string>
+    <string name="msg_tool_audio">Herramienta audio</string>
+    <string name="msg_tool_text">Herramienta texto</string>
+    <string name="msg_tool_animate">Herramienta animar</string>
+    <string name="msg_tool_effects">Herramienta efectos</string>
+    <string name="msg_tool_shapes">Herramienta formas</string>
+    <string name="msg_tool_pip">Herramienta PIP</string>
+
+    <string name="project_unidentified">Proyecto sin identificar</string>
+    <string name="project_with_id">Proyecto #%1$d</string>
+    <string name="time_zero">00:00:00</string>
 </resources>
