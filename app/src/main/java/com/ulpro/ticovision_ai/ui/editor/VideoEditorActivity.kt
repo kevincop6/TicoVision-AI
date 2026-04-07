@@ -32,8 +32,7 @@ import kotlinx.coroutines.launch
 /**
  * Pantalla principal del editor de video.
  *
- * Esta Activity coordina la UI y delega reproducción, timeline, permisos,
- * picker, autosave y tags temporales a controladores especializados.
+ * Adaptada al nuevo EditorPlayerController y al nuevo TimelineThumbnailProvider.
  */
 class VideoEditorActivity : AppCompatActivity() {
 
@@ -52,7 +51,6 @@ class VideoEditorActivity : AppCompatActivity() {
     private var projectId: Long = VideoEditorConfig.INVALID_PROJECT_ID
     private var timelineItems: List<TimelineItemEntity> = emptyList()
     private var visualTimelineItems: List<TimelineItemEntity> = emptyList()
-    private var timelineVideoItems: List<TimelineItemEntity> = emptyList()
     private var currentTimelineItem: TimelineItemEntity? = null
     private var currentPlaylistIndex: Int = 0
     private var totalTimelineDurationMs: Long = 0L
@@ -119,8 +117,7 @@ class VideoEditorActivity : AppCompatActivity() {
         )
 
         thumbnailProvider = TimelineThumbnailProvider(
-            context = this,
-            lifecycleScope = lifecycleScope
+            context = this
         )
 
         timelineRenderer = TimelineRenderer(
@@ -130,66 +127,61 @@ class VideoEditorActivity : AppCompatActivity() {
             thumbnailProvider = thumbnailProvider,
             onVideoItemSelected = { item, index ->
                 currentTimelineItem = item
-                currentPlaylistIndex = index
+                currentPlaylistIndex = index.coerceAtLeast(0)
 
-                val playableIndex = timelineVideoItems.indexOfFirst {
-                    it.timelineKey() == item.timelineKey()
-                }
-
-                if (playableIndex >= 0) {
-                    playerController.prepareTimelinePlaylist(
-                        timelineVideoItems = timelineVideoItems,
-                        startIndex = playableIndex,
-                        startPositionMs = 0L,
-                        autoPlay = false,
-                        isVideoMuted = playerController.isMuted(),
-                        onVideoItemChanged = { changedItem, _ ->
-                            currentTimelineItem = changedItem
-                            currentPlaylistIndex = visualTimelineItems.indexOfFirst {
-                                it.timelineKey() == changedItem.timelineKey()
-                            }.coerceAtLeast(0)
-                        },
-                        onUiSyncRequested = {
-                            updatePreviewVisibility(hasMedia = true)
-                            updateTimeTextsFromPlayer()
-                            updatePlayheadFromPlayer()
-                        }
-                    )
-                }
-
-                timelineRenderer.renderTimelineItems(
-                    items = timelineItems,
-                    currentTimelineItem = currentTimelineItem,
-                    currentPlaylistIndex = currentPlaylistIndex
+                playerController.prepareTimelinePlaylist(
+                    timelineItems = visualTimelineItems,
+                    startIndex = currentPlaylistIndex,
+                    startPositionMs = 0L,
+                    autoPlay = false,
+                    isVideoMuted = playerController.isMuted(),
+                    onTimelineItemChanged = { changedItem, playableIndex ->
+                        currentTimelineItem = changedItem
+                        currentPlaylistIndex = visualTimelineItems.indexOfFirst {
+                            it.timelineKey() == changedItem.timelineKey()
+                        }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                        syncPreviewWithCurrentItem()
+                    },
+                    onUiSyncRequested = {
+                        syncPreviewWithCurrentItem()
+                        updateTimeTextsFromPlayer()
+                        updatePlayheadFromPlayer()
+                        renderTimelineSelection()
+                    }
                 )
 
+                syncPreviewWithCurrentItem()
+                renderTimelineSelection()
                 actionTagController.showTemporaryAction("Clip seleccionado")
             },
             onImageItemSelected = { item, index ->
-                playerController.stopAndClear()
-
                 currentTimelineItem = item
                 currentPlaylistIndex = index.coerceAtLeast(0)
 
-                val uri = item.sourceUri?.let { Uri.parse(it) }
-                if (uri != null) {
-                    binding.ivPreviewPlaceholder.setImageURI(uri)
-                } else {
-                    binding.ivPreviewPlaceholder.setImageDrawable(null)
-                }
-
-                binding.tvTimeCurrent.text = formatDuration(0L)
-                binding.tvTimeTotal.text = formatDuration(totalTimelineDurationMs)
-                updatePreviewVisibility(hasMedia = true)
-                updatePlayPauseIcon(isPlaying = false)
-
-                timelineRenderer.renderTimelineItems(
-                    items = timelineItems,
-                    currentTimelineItem = currentTimelineItem,
-                    currentPlaylistIndex = currentPlaylistIndex
+                playerController.prepareTimelinePlaylist(
+                    timelineItems = visualTimelineItems,
+                    startIndex = currentPlaylistIndex,
+                    startPositionMs = 0L,
+                    autoPlay = false,
+                    isVideoMuted = playerController.isMuted(),
+                    onTimelineItemChanged = { changedItem, playableIndex ->
+                        currentTimelineItem = changedItem
+                        currentPlaylistIndex = visualTimelineItems.indexOfFirst {
+                            it.timelineKey() == changedItem.timelineKey()
+                        }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                        syncPreviewWithCurrentItem()
+                    },
+                    onUiSyncRequested = {
+                        syncPreviewWithCurrentItem()
+                        updateTimeTextsFromPlayer()
+                        updatePlayheadFromPlayer()
+                        renderTimelineSelection()
+                    }
                 )
 
-                actionTagController.showTemporaryAction("Imagen cargada en preview")
+                syncPreviewWithCurrentItem()
+                renderTimelineSelection()
+                actionTagController.showTemporaryAction("Imagen seleccionada")
             }
         )
 
@@ -201,23 +193,24 @@ class VideoEditorActivity : AppCompatActivity() {
                 updatePlayPauseIcon(isPlaying)
             },
             onMediaItemTransition = { newIndex ->
-                if (newIndex in timelineVideoItems.indices) {
-                    val newVideoItem = timelineVideoItems[newIndex]
-                    currentTimelineItem = newVideoItem
-                    currentPlaylistIndex = visualTimelineItems.indexOfFirst {
-                        it.timelineKey() == newVideoItem.timelineKey()
-                    }.coerceAtLeast(0)
+                val playableItems = playerController.getCurrentPlayableTimelineItems()
 
-                    timelineRenderer.renderTimelineItems(
-                        items = timelineItems,
-                        currentTimelineItem = currentTimelineItem,
-                        currentPlaylistIndex = currentPlaylistIndex
-                    )
+                if (newIndex in playableItems.indices) {
+                    val newItem = playableItems[newIndex]
+                    currentTimelineItem = newItem
+                    currentPlaylistIndex = visualTimelineItems.indexOfFirst {
+                        it.timelineKey() == newItem.timelineKey()
+                    }.coerceAtLeast(0)
                 }
+
+                syncPreviewWithCurrentItem()
+                renderTimelineSelection()
                 updateTimeTextsFromPlayer()
+                updatePlayheadFromPlayer()
             },
             onPlaybackEnded = {
                 updatePlayPauseIcon(false)
+                syncPreviewWithCurrentItem()
                 updateTimeTextsFromPlayer()
                 updatePlayhead(
                     totalTimelineDurationMs,
@@ -225,7 +218,9 @@ class VideoEditorActivity : AppCompatActivity() {
                 )
             },
             onPositionRelevantEvent = {
+                syncPreviewWithCurrentItem()
                 updateTimeTextsFromPlayer()
+                updatePlayheadFromPlayer()
             },
             onPlayerError = { throwable ->
                 saveDebugReport(
@@ -236,20 +231,12 @@ class VideoEditorActivity : AppCompatActivity() {
                         "projectId" to projectId.toString(),
                         "currentTimelineItemType" to (currentTimelineItem?.type ?: "null"),
                         "currentTimelineItemUri" to (currentTimelineItem?.sourceUri ?: "null"),
-                        "timelineVideos" to timelineVideoItems.size.toString(),
-                        "timelineVisualItems" to visualTimelineItems.size.toString()
+                        "visualTimelineItems" to visualTimelineItems.size.toString()
                     )
                 )
 
                 updatePlayPauseIcon(false)
-                saveDebugReport(
-                    tag ="player_error",
-                    message = "Error durante reproducción de contenido, throwable:$throwable",
-                    extraData = mapOf(
-                        "projectId" to projectId.toString(),
-                        "reportsFolder" to errorReportManager.getReportsFolderPath()
-                    )
-                )
+
                 Toast.makeText(
                     this,
                     "Error reproduciendo contenido. Se generó un reporte.",
@@ -294,41 +281,34 @@ class VideoEditorActivity : AppCompatActivity() {
         }
 
         binding.btnPlayPause.setOnClickListener {
-            if (timelineVideoItems.isEmpty()) {
-                actionTagController.showTemporaryAction("No hay videos cargados para reproducir")
-                updatePlayPauseIcon(isPlaying = false)
+            if (visualTimelineItems.isEmpty()) {
+                actionTagController.showTemporaryAction("No hay clips cargados para reproducir")
+                updatePlayPauseIcon(false)
                 return@setOnClickListener
             }
 
             if (playerController.mediaItemCount() == 0) {
-                val safeVisualIndex = currentPlaylistIndex.coerceIn(
+                val safeIndex = currentPlaylistIndex.coerceIn(
                     0,
                     visualTimelineItems.lastIndex.coerceAtLeast(0)
                 )
 
-                val currentVisualItem = visualTimelineItems.getOrNull(safeVisualIndex)
-                val startPlayableIndex = if (currentVisualItem != null) {
-                    timelineVideoItems.indexOfFirst {
-                        it.timelineKey() == currentVisualItem.timelineKey()
-                    }.takeIf { it >= 0 } ?: 0
-                } else {
-                    0
-                }
-
                 playerController.prepareTimelinePlaylist(
-                    timelineVideoItems = timelineVideoItems,
-                    startIndex = startPlayableIndex.coerceIn(0, timelineVideoItems.lastIndex),
+                    timelineItems = visualTimelineItems,
+                    startIndex = safeIndex,
                     startPositionMs = 0L,
                     autoPlay = true,
                     isVideoMuted = playerController.isMuted(),
-                    onVideoItemChanged = { changedItem, _ ->
+                    onTimelineItemChanged = { changedItem, playableIndex ->
                         currentTimelineItem = changedItem
                         currentPlaylistIndex = visualTimelineItems.indexOfFirst {
                             it.timelineKey() == changedItem.timelineKey()
-                        }.coerceAtLeast(0)
+                        }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                        syncPreviewWithCurrentItem()
+                        renderTimelineSelection()
                     },
                     onUiSyncRequested = {
-                        updatePreviewVisibility(hasMedia = true)
+                        syncPreviewWithCurrentItem()
                         updateTimeTextsFromPlayer()
                         updatePlayheadFromPlayer()
                     }
@@ -397,14 +377,8 @@ class VideoEditorActivity : AppCompatActivity() {
     private fun setupTimelineInteractions() {
         binding.timelineScroll.setOnTouchListener { _, event ->
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    isDraggingPlayhead = false
-                }
-
-                MotionEvent.ACTION_UP,
-                MotionEvent.ACTION_CANCEL -> {
-                    isDraggingPlayhead = false
-                }
+                MotionEvent.ACTION_DOWN -> isDraggingPlayhead = false
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> isDraggingPlayhead = false
             }
             false
         }
@@ -518,14 +492,6 @@ class VideoEditorActivity : AppCompatActivity() {
                         "uri" to uri.toString()
                     )
                 )
-                saveDebugReport(
-                    tag ="add_video_error",
-                    message = "Error agregando video al timeline, throwable:$e",
-                    extraData = mapOf(
-                        "projectId" to projectId.toString(),
-                        "reportsFolder" to errorReportManager.getReportsFolderPath()
-                    )
-                )
                 Toast.makeText(
                     this@VideoEditorActivity,
                     e.message ?: "No se pudo agregar el video al timeline.",
@@ -567,21 +533,13 @@ class VideoEditorActivity : AppCompatActivity() {
                 restoreTimelineAndPreview(playLastAdded = true)
                 actionTagController.showTemporaryAction("Imagen agregada al timeline")
             } catch (e: Exception) {
-                errorReportManager.saveErrorReport(
+                saveDebugReport(
                     tag = "add_image_error",
                     message = "Error agregando imagen al timeline",
                     throwable = e,
                     extraData = mapOf(
                         "projectId" to projectId.toString(),
                         "uri" to uri.toString()
-                    )
-                )
-                saveDebugReport(
-                    tag ="add_image_error",
-                    message = "Error agregando imagen al timeline, throwable:$e",
-                    extraData = mapOf(
-                        "projectId" to projectId.toString(),
-                        "reportsFolder" to errorReportManager.getReportsFolderPath()
                     )
                 )
                 Toast.makeText(
@@ -594,7 +552,7 @@ class VideoEditorActivity : AppCompatActivity() {
     }
 
     /**
-     * Restaura el timeline desde base de datos y sincroniza el preview.
+     * Restaura el timeline desde base de datos y sincroniza preview y player.
      */
     private fun restoreTimelineAndPreview(playLastAdded: Boolean = false) {
         if (projectId == VideoEditorConfig.INVALID_PROJECT_ID) return
@@ -603,14 +561,7 @@ class VideoEditorActivity : AppCompatActivity() {
             try {
                 timelineItems = repository.getTimelineItems(projectId)
                 visualTimelineItems = timelineItems.filter { it.type == "video" || it.type == "image" }
-                timelineVideoItems = timelineItems.filter { it.type == "video" }
                 totalTimelineDurationMs = visualTimelineItems.sumOf { it.durationMs.coerceAtLeast(0L) }
-
-                timelineRenderer.renderTimelineItems(
-                    items = timelineItems,
-                    currentTimelineItem = currentTimelineItem,
-                    currentPlaylistIndex = currentPlaylistIndex
-                )
 
                 if (timelineItems.isEmpty()) {
                     currentTimelineItem = null
@@ -618,25 +569,35 @@ class VideoEditorActivity : AppCompatActivity() {
                     totalTimelineDurationMs = 0L
 
                     playerController.stopAndClear()
+                    binding.ivPreviewPlaceholder.setImageDrawable(null)
                     updatePreviewVisibility(hasMedia = false)
-                    updatePlayPauseIcon(isPlaying = false)
+                    updatePlayPauseIcon(false)
                     binding.tvTimeCurrent.text = formatDuration(0L)
                     binding.tvTimeTotal.text = formatDuration(0L)
                     updatePlayhead(0L, 1L)
+                    timelineRenderer.renderTimelineItems(
+                        items = timelineItems,
+                        currentTimelineItem = null,
+                        currentPlaylistIndex = 0
+                    )
                     return@launch
                 }
-
-                updatePreviewVisibility(hasMedia = true)
 
                 if (visualTimelineItems.isEmpty()) {
                     currentTimelineItem = null
                     currentPlaylistIndex = 0
-
                     playerController.stopAndClear()
+                    binding.ivPreviewPlaceholder.setImageDrawable(null)
+                    updatePreviewVisibility(hasMedia = false)
+                    updatePlayPauseIcon(false)
                     binding.tvTimeCurrent.text = formatDuration(0L)
                     binding.tvTimeTotal.text = formatDuration(0L)
-                    updatePlayPauseIcon(isPlaying = false)
                     updatePlayhead(0L, 1L)
+                    timelineRenderer.renderTimelineItems(
+                        items = timelineItems,
+                        currentTimelineItem = null,
+                        currentPlaylistIndex = 0
+                    )
                     return@launch
                 }
 
@@ -649,70 +610,63 @@ class VideoEditorActivity : AppCompatActivity() {
                 currentPlaylistIndex = selectedIndex
                 currentTimelineItem = visualTimelineItems[selectedIndex]
 
-                val selectedItem = visualTimelineItems[selectedIndex]
-
-                if (selectedItem.type == "image") {
-                    playerController.stopAndClear()
-
-                    val selectedUri = selectedItem.sourceUri?.let { Uri.parse(it) }
-                    if (selectedUri != null) {
-                        binding.ivPreviewPlaceholder.setImageURI(selectedUri)
-                    } else {
-                        binding.ivPreviewPlaceholder.setImageDrawable(null)
+                playerController.prepareTimelinePlaylist(
+                    timelineItems = visualTimelineItems,
+                    startIndex = currentPlaylistIndex,
+                    startPositionMs = 0L,
+                    autoPlay = false,
+                    isVideoMuted = playerController.isMuted(),
+                    onTimelineItemChanged = { changedItem, playableIndex ->
+                        currentTimelineItem = changedItem
+                        currentPlaylistIndex = visualTimelineItems.indexOfFirst {
+                            it.timelineKey() == changedItem.timelineKey()
+                        }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                        syncPreviewWithCurrentItem()
+                    },
+                    onUiSyncRequested = {
+                        syncPreviewWithCurrentItem()
+                        updateTimeTextsFromPlayer()
+                        updatePlayheadFromPlayer()
+                        renderTimelineSelection()
                     }
-
-                    updatePreviewVisibility(hasMedia = true)
-                    updatePlayPauseIcon(false)
-                    binding.tvTimeCurrent.text = formatDuration(0L)
-                    binding.tvTimeTotal.text = formatDuration(totalTimelineDurationMs)
-                    updatePlayhead(0L, totalTimelineDurationMs.coerceAtLeast(1L))
-                } else {
-                    val playableIndex = timelineVideoItems.indexOfFirst {
-                        it.timelineKey() == selectedItem.timelineKey()
-                    }.coerceAtLeast(0)
-
-                    playerController.prepareTimelinePlaylist(
-                        timelineVideoItems = timelineVideoItems,
-                        startIndex = playableIndex,
-                        startPositionMs = 0L,
-                        autoPlay = false,
-                        isVideoMuted = playerController.isMuted(),
-                        onVideoItemChanged = { changedItem, _ ->
-                            currentTimelineItem = changedItem
-                            currentPlaylistIndex = visualTimelineItems.indexOfFirst {
-                                it.timelineKey() == changedItem.timelineKey()
-                            }.coerceAtLeast(0)
-                        },
-                        onUiSyncRequested = {
-                            updatePreviewVisibility(hasMedia = true)
-                            updateTimeTextsFromPlayer()
-                            updatePlayheadFromPlayer()
-                        }
-                    )
-                }
+                )
             } catch (e: Exception) {
-                errorReportManager.saveErrorReport(
+                saveDebugReport(
                     tag = "restore_timeline_error",
                     message = "Error restaurando timeline y preview",
                     throwable = e,
-                    extraData = mapOf(
-                        "projectId" to projectId.toString()
-                    )
-                )
-                saveDebugReport(
-                    tag ="restore_timeline_error",
-                    message = "Error restaurando timeline y preview, throwable:$e",
-                    extraData = mapOf(
-                        "projectId" to projectId.toString(),
-                        "reportsFolder" to errorReportManager.getReportsFolderPath()
-                    )
+                    extraData = mapOf("projectId" to projectId.toString())
                 )
             }
         }
     }
 
     /**
-     * Actualiza etiquetas de tiempo desde la posición del player.
+     * Sincroniza el preview con el item actual.
+     */
+    private fun syncPreviewWithCurrentItem() {
+        val item = currentTimelineItem
+
+        if (item == null) {
+            binding.ivPreviewPlaceholder.setImageDrawable(null)
+            updatePreviewVisibility(hasMedia = false)
+            return
+        }
+
+        if (item.type == "image") {
+            val imageUri = item.sourceUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            if (imageUri != null) {
+                binding.ivPreviewPlaceholder.setImageURI(imageUri)
+            } else {
+                binding.ivPreviewPlaceholder.setImageDrawable(null)
+            }
+        }
+
+        updatePreviewVisibility(hasMedia = true)
+    }
+
+    /**
+     * Actualiza etiquetas de tiempo usando la lista reproducible real del player.
      */
     private fun updateTimeTextsFromPlayer() {
         if (visualTimelineItems.isEmpty()) {
@@ -721,29 +675,20 @@ class VideoEditorActivity : AppCompatActivity() {
             return
         }
 
-        if (timelineVideoItems.isEmpty()) {
-            binding.tvTimeCurrent.text = formatDuration(0L)
-            binding.tvTimeTotal.text = formatDuration(totalTimelineDurationMs)
-            return
-        }
-
-        val totalPlayableDurationMs = timelineVideoItems.sumOf { it.durationMs.coerceAtLeast(0L) }
-
-        val globalPosition = playerController.getGlobalPlaybackPosition(
-            timelineVideoItems = timelineVideoItems,
-            totalVideoDurationMs = totalPlayableDurationMs
-        )
+        val globalPosition = playerController.getGlobalPlaybackPosition()
 
         binding.tvTimeCurrent.text = formatDuration(globalPosition)
         binding.tvTimeTotal.text = formatDuration(totalTimelineDurationMs)
     }
 
     /**
-     * Mueve el playhead a partir del arrastre del usuario.
+     * Mueve el playhead desde el arrastre del usuario.
      */
     private fun movePlayheadFromTouch(rawLocalX: Float, seekPlayer: Boolean) {
         val totalDuration = totalTimelineDurationMs.coerceAtLeast(1L)
-        val contentWidth = binding.timelineContent.width.coerceAtLeast(binding.timelineVideoTrack.width)
+        val contentWidth = binding.timelineContent.width.coerceAtLeast(
+            binding.timelineVideoTrack.width
+        )
 
         if (contentWidth <= 0) return
         if (visualTimelineItems.isEmpty()) return
@@ -757,28 +702,20 @@ class VideoEditorActivity : AppCompatActivity() {
         updatePlayhead(globalPositionMs, totalDuration)
         binding.tvTimeCurrent.text = formatDuration(globalPositionMs)
 
-        if (seekPlayer && timelineVideoItems.isNotEmpty()) {
-            val totalPlayableDurationMs = timelineVideoItems.sumOf { it.durationMs.coerceAtLeast(0L) }
-            val clampedPlayablePosition = globalPositionMs.coerceIn(0L, totalPlayableDurationMs)
-
+        if (seekPlayer && playerController.mediaItemCount() > 0) {
             playerController.seekToGlobalPosition(
-                globalPositionMs = clampedPlayablePosition,
-                timelineVideoItems = timelineVideoItems,
-                totalVideoDurationMs = totalPlayableDurationMs,
-                onVideoItemChanged = { changedItem, _ ->
+                globalPositionMs = globalPositionMs,
+                onTimelineItemChanged = { changedItem, playableIndex ->
                     currentTimelineItem = changedItem
                     currentPlaylistIndex = visualTimelineItems.indexOfFirst {
                         it.timelineKey() == changedItem.timelineKey()
-                    }.coerceAtLeast(0)
+                    }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                    syncPreviewWithCurrentItem()
                 },
                 onUiSyncRequested = {
                     updateTimeTextsFromPlayer()
                     updatePlayheadFromPlayer()
-                    timelineRenderer.renderTimelineItems(
-                        items = timelineItems,
-                        currentTimelineItem = currentTimelineItem,
-                        currentPlaylistIndex = currentPlaylistIndex
-                    )
+                    renderTimelineSelection()
                 }
             )
         }
@@ -802,22 +739,22 @@ class VideoEditorActivity : AppCompatActivity() {
     }
 
     /**
-     * Refresca el playhead usando el tiempo global calculado desde el player.
+     * Refresca playhead desde la posición real del player.
      */
     private fun updatePlayheadFromPlayer() {
-        if (timelineVideoItems.isEmpty()) {
-            updatePlayhead(0L, totalTimelineDurationMs.coerceAtLeast(1L))
-            return
-        }
-
-        val totalPlayableDurationMs = timelineVideoItems.sumOf { it.durationMs.coerceAtLeast(0L) }
-
-        val globalPosition = playerController.getGlobalPlaybackPosition(
-            timelineVideoItems = timelineVideoItems,
-            totalVideoDurationMs = totalPlayableDurationMs
-        )
-
+        val globalPosition = playerController.getGlobalPlaybackPosition()
         updatePlayhead(globalPosition, totalTimelineDurationMs.coerceAtLeast(1L))
+    }
+
+    /**
+     * Renderiza la selección actual del timeline.
+     */
+    private fun renderTimelineSelection() {
+        timelineRenderer.renderTimelineItems(
+            items = timelineItems,
+            currentTimelineItem = currentTimelineItem,
+            currentPlaylistIndex = currentPlaylistIndex
+        )
     }
 
     /**
@@ -839,10 +776,18 @@ class VideoEditorActivity : AppCompatActivity() {
     }
 
     /**
-     * Muestra player o placeholder según el elemento actual.
+     * Muestra player o placeholder según el tipo actual.
      */
     private fun updatePreviewVisibility(hasMedia: Boolean) {
-        if (hasMedia && currentTimelineItem?.type == "video") {
+        val item = currentTimelineItem
+
+        if (!hasMedia || item == null) {
+            binding.playerView.visibility = View.GONE
+            binding.ivPreviewPlaceholder.visibility = View.VISIBLE
+            return
+        }
+
+        if (item.type == "video") {
             binding.playerView.visibility = View.VISIBLE
             binding.ivPreviewPlaceholder.visibility = View.GONE
         } else {
@@ -880,20 +825,18 @@ class VideoEditorActivity : AppCompatActivity() {
 
                 binding.tvTimeTotal.text = formatDuration(durationToShow)
             } catch (e: Exception) {
-                errorReportManager.saveErrorReport(
+                saveDebugReport(
                     tag = "load_project_info_error",
                     message = "Error cargando información del proyecto",
                     throwable = e,
-                    extraData = mapOf(
-                        "projectId" to projectId.toString()
-                    )
+                    extraData = mapOf("projectId" to projectId.toString())
                 )
             }
         }
     }
 
     /**
-     * Registra una edición simple en el historial del proyecto.
+     * Registra una edición simple.
      */
     private fun registerEdit(editType: String, message: String) {
         if (projectId == VideoEditorConfig.INVALID_PROJECT_ID) return
@@ -906,7 +849,7 @@ class VideoEditorActivity : AppCompatActivity() {
                 )
                 actionTagController.showTemporaryAction(message)
             } catch (e: Exception) {
-                errorReportManager.saveErrorReport(
+                saveDebugReport(
                     tag = "register_edit_error",
                     message = "Error registrando edición",
                     throwable = e,
@@ -920,14 +863,13 @@ class VideoEditorActivity : AppCompatActivity() {
     }
 
     /**
-     * Renderiza estado inválido del proyecto.
+     * Renderiza estado inválido.
      */
     private fun renderInvalidProject() {
         currentTimelineItem = null
         currentPlaylistIndex = 0
         timelineItems = emptyList()
         visualTimelineItems = emptyList()
-        timelineVideoItems = emptyList()
         totalTimelineDurationMs = 0L
 
         binding.tvProjectTitle.text = getString(R.string.project_unidentified)
@@ -938,11 +880,14 @@ class VideoEditorActivity : AppCompatActivity() {
         binding.audioWaveTrack.removeAllViews()
         binding.externalAudioTrackContainer.visibility = View.GONE
 
-        playerController.stopAndClear()
+        if (::playerController.isInitialized) {
+            playerController.stopAndClear()
+            updateMuteIcon(playerController.isMuted())
+        }
 
-        updatePreviewVisibility(hasMedia = false)
-        updatePlayPauseIcon(isPlaying = false)
-        updateMuteIcon(playerController.isMuted())
+        binding.ivPreviewPlaceholder.setImageDrawable(null)
+        updatePreviewVisibility(false)
+        updatePlayPauseIcon(false)
         actionTagController.clear()
     }
 
@@ -957,28 +902,24 @@ class VideoEditorActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        playerController.pause()
-        updatePlayPauseIcon(isPlaying = false)
+        if (::playerController.isInitialized) {
+            playerController.pause()
+        }
+        updatePlayPauseIcon(false)
     }
 
     override fun onDestroy() {
         errorReportManager.trimReports(30)
         autoSaveController.stop()
         actionTagController.release()
-        playerController.release()
+
+        if (::playerController.isInitialized) {
+            playerController.release()
+        }
+
         super.onDestroy()
     }
 
-    companion object {
-        /**
-         * Crea el intent para abrir el editor.
-         */
-        fun createIntent(context: Context, projectId: Long): Intent {
-            return Intent(context, VideoEditorActivity::class.java).apply {
-                putExtra(VideoEditorConfig.EXTRA_PROJECT_ID, projectId)
-            }
-        }
-    }
     /**
      * Guarda un reporte y muestra al usuario si se logró crear.
      */
@@ -1007,6 +948,17 @@ class VideoEditorActivity : AppCompatActivity() {
                 "No se pudo guardar el reporte de error",
                 Toast.LENGTH_LONG
             ).show()
+        }
+    }
+
+    companion object {
+        /**
+         * Crea el intent para abrir el editor.
+         */
+        fun createIntent(context: Context, projectId: Long): Intent {
+            return Intent(context, VideoEditorActivity::class.java).apply {
+                putExtra(VideoEditorConfig.EXTRA_PROJECT_ID, projectId)
+            }
         }
     }
 }

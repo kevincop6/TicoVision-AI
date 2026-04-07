@@ -1,7 +1,6 @@
 package com.ulpro.ticovision_ai.ui.editor.timeline
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.net.Uri
 import android.view.View
 import android.view.ViewGroup
@@ -15,10 +14,17 @@ import com.ulpro.ticovision_ai.data.local.entity.TimelineItemEntity
 import com.ulpro.ticovision_ai.databinding.ActivityVideoEditorBinding
 import com.ulpro.ticovision_ai.ui.editor.VideoEditorConfig
 import com.ulpro.ticovision_ai.ui.editor.util.dp
+import com.ulpro.ticovision_ai.ui.editor.util.timelineKey
 import kotlinx.coroutines.launch
 
 /**
  * Renderiza visualmente los clips del timeline: video, imagen y pista de audio externa.
+ *
+ * Esta versión corrige:
+ * - Tipado de listas.
+ * - Selección consistente para imagen y video.
+ * - Pintado tardío de miniaturas en vistas recicladas.
+ * - Exceso de carga visual por thumbnails demasiado costosas.
  */
 class TimelineRenderer(
     private val context: Context,
@@ -30,7 +36,7 @@ class TimelineRenderer(
 ) {
 
     /**
-     * Renderiza la lista completa de elementos del timeline.
+     * Renderiza todos los elementos del timeline.
      */
     fun renderTimelineItems(
         items: List<TimelineItemEntity>,
@@ -47,10 +53,23 @@ class TimelineRenderer(
 
         val visualTimelineItems = items.filter { it.type == "video" || it.type == "image" }
 
+        if (visualTimelineItems.isEmpty()) {
+            updateTimelineContentWidth(0)
+            renderExternalAudioTrackIfNeeded(items)
+            return
+        }
+
         visualTimelineItems.forEachIndexed { index, item ->
+            val isSelected = isItemSelected(
+                item = item,
+                index = index,
+                currentTimelineItem = currentTimelineItem,
+                currentPlaylistIndex = currentPlaylistIndex
+            )
+
             val itemView = when (item.type) {
-                "video" -> createVideoThumbnailView(item, index, currentTimelineItem, currentPlaylistIndex)
-                "image" -> createImageThumbnailView(item, index)
+                "video" -> createVideoThumbnailView(item, index, isSelected)
+                "image" -> createImageThumbnailView(item, index, isSelected)
                 else -> null
             }
 
@@ -67,7 +86,20 @@ class TimelineRenderer(
     }
 
     /**
-     * Actualiza el ancho total del contenido del timeline y las pistas asociadas.
+     * Determina si un clip está seleccionado.
+     */
+    private fun isItemSelected(
+        item: TimelineItemEntity,
+        index: Int,
+        currentTimelineItem: TimelineItemEntity?,
+        currentPlaylistIndex: Int
+    ): Boolean {
+        val sameByKey = currentTimelineItem?.timelineKey() == item.timelineKey()
+        return sameByKey || currentPlaylistIndex == index
+    }
+
+    /**
+     * Actualiza el ancho del contenido del timeline y pistas asociadas.
      */
     private fun updateTimelineContentWidth(trackWidthPx: Int) {
         val minWidthPx = VideoEditorConfig.TIMELINE_MIN_CONTENT_WIDTH_DP.dp(context)
@@ -84,35 +116,35 @@ class TimelineRenderer(
         binding.audioWaveTrack.layoutParams = binding.audioWaveTrack.layoutParams.apply {
             width = finalWidth
         }
+
+        binding.timelineContent.requestLayout()
+        binding.timelineRuler.requestLayout()
+        binding.audioWaveTrack.requestLayout()
     }
 
     /**
-     * Crea una vista de clip de video con miniaturas y borde de selección.
+     * Crea la vista de un clip de video.
      */
     private fun createVideoThumbnailView(
         item: TimelineItemEntity,
         index: Int,
-        currentTimelineItem: TimelineItemEntity?,
-        currentPlaylistIndex: Int
+        isSelected: Boolean
     ): View {
         val itemWidth = calculateTimelineItemWidthPx(item)
-        val frameLayout = FrameLayout(context)
 
-        val params = LinearLayout.LayoutParams(
-            itemWidth,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ).apply {
-            marginEnd = 2.dp(context)
+        val frameLayout = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                itemWidth,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ).apply {
+                marginEnd = 2.dp(context)
+            }
+            setBackgroundColor(0xFF2A2A2A.toInt())
+            clipToOutline = true
         }
-
-        frameLayout.layoutParams = params
-        frameLayout.setBackgroundColor(0xFF2A2A2A.toInt())
 
         val framesStrip = createVideoFramesStripOptimized(item, itemWidth)
         frameLayout.addView(framesStrip)
-
-        val isSelected = currentPlaylistIndex == index &&
-                currentTimelineItem?.sourceUri == item.sourceUri
 
         val overlay = View(context).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -148,24 +180,25 @@ class TimelineRenderer(
     }
 
     /**
-     * Crea una vista de clip de imagen con repetición visual de frames.
+     * Crea la vista de un clip de imagen.
      */
     private fun createImageThumbnailView(
         item: TimelineItemEntity,
-        index: Int
+        index: Int,
+        isSelected: Boolean
     ): View {
         val itemWidth = calculateTimelineItemWidthPx(item)
-        val frameLayout = FrameLayout(context)
 
-        val params = LinearLayout.LayoutParams(
-            itemWidth,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ).apply {
-            marginEnd = 2.dp(context)
+        val frameLayout = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                itemWidth,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ).apply {
+                marginEnd = 2.dp(context)
+            }
+            setBackgroundColor(0xFF2E2E2E.toInt())
+            clipToOutline = true
         }
-
-        frameLayout.layoutParams = params
-        frameLayout.setBackgroundColor(0xFF2E2E2E.toInt())
 
         val framesStrip = createImageFramesStrip(item, itemWidth)
         frameLayout.addView(framesStrip)
@@ -175,10 +208,26 @@ class TimelineRenderer(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            setBackgroundColor(0x14000000)
+            setBackgroundColor(if (isSelected) 0x22FFFFFF else 0x14000000)
+        }
+
+        val borderView = View(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            background = ContextCompat.getDrawable(
+                context,
+                if (isSelected) {
+                    R.drawable.bg_selected_timeline_item
+                } else {
+                    R.drawable.bg_normal_timeline_item
+                }
+            )
         }
 
         frameLayout.addView(overlay)
+        frameLayout.addView(borderView)
 
         frameLayout.setOnClickListener {
             onImageItemSelected(item, index)
@@ -188,7 +237,7 @@ class TimelineRenderer(
     }
 
     /**
-     * Calcula el ancho visual del clip en el timeline en función de la duración.
+     * Calcula ancho visual del clip según duración.
      */
     private fun calculateTimelineItemWidthPx(item: TimelineItemEntity): Int {
         val minWidth = VideoEditorConfig.TIMELINE_MIN_ITEM_WIDTH_DP.dp(context)
@@ -199,7 +248,7 @@ class TimelineRenderer(
     }
 
     /**
-     * Construye la tira de miniaturas para un clip de imagen repitiendo la misma imagen.
+     * Construye la tira de imagen repitiendo miniaturas seguras y livianas.
      */
     private fun createImageFramesStrip(
         item: TimelineItemEntity,
@@ -213,35 +262,44 @@ class TimelineRenderer(
             orientation = LinearLayout.HORIZONTAL
         }
 
-        val frameWidth = VideoEditorConfig.TIMELINE_IMAGE_FRAME_WIDTH_DP.dp(context)
-        val frameCount = (itemWidth / frameWidth).coerceAtLeast(2)
-        val uri = item.sourceUri?.let { Uri.parse(it) }
+        val frameWidth = VideoEditorConfig.TIMELINE_IMAGE_FRAME_WIDTH_DP.dp(context).coerceAtLeast(1)
+        val frameCount = (itemWidth / frameWidth).coerceIn(1, 12)
+        val uri = item.sourceUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
 
-        repeat(frameCount) {
+        repeat(frameCount) { frameIndex ->
             val imageView = ImageView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     0,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     1f
                 ).apply {
-                    marginEnd = 1.dp(context)
+                    marginEnd = if (frameIndex == frameCount - 1) 0 else 1.dp(context)
                 }
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(0xFF404040.toInt())
-            }
-
-            if (uri != null) {
-                imageView.setImageURI(uri)
+                setImageDrawable(null)
             }
 
             strip.addView(imageView)
+
+            if (uri != null && thumbnailProvider.canReadUri(uri)) {
+                val requestKey = "${item.timelineKey()}|image|$frameIndex"
+                imageView.tag = requestKey
+
+                lifecycleScope.launch {
+                    val bitmap = thumbnailProvider.getImageThumbnail(uri)
+                    if (imageView.tag == requestKey && bitmap != null) {
+                        imageView.setImageBitmap(bitmap)
+                    }
+                }
+            }
         }
 
         return strip
     }
 
     /**
-     * Construye la tira de miniaturas optimizada para un clip de video.
+     * Construye la tira de miniaturas del video con protección contra render tardío.
      */
     private fun createVideoFramesStripOptimized(
         item: TimelineItemEntity,
@@ -255,9 +313,10 @@ class TimelineRenderer(
             orientation = LinearLayout.HORIZONTAL
         }
 
-        val frameWidth = VideoEditorConfig.TIMELINE_VIDEO_FRAME_WIDTH_DP.dp(context)
-        val frameCount = (itemWidth / frameWidth).coerceAtLeast(2)
-        val uri = item.sourceUri?.let { Uri.parse(it) }
+        val frameWidth = VideoEditorConfig.TIMELINE_VIDEO_FRAME_WIDTH_DP.dp(context).coerceAtLeast(1)
+        val frameCount = (itemWidth / frameWidth).coerceIn(1, 12)
+        val uri = item.sourceUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        val durationMs = item.durationMs.coerceAtLeast(1000L)
 
         repeat(frameCount) { frameIndex ->
             val imageView = ImageView(context).apply {
@@ -266,22 +325,32 @@ class TimelineRenderer(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     1f
                 ).apply {
-                    marginEnd = 1.dp(context)
+                    marginEnd = if (frameIndex == frameCount - 1) 0 else 1.dp(context)
                 }
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(0xFF353535.toInt())
+                setImageDrawable(null)
             }
 
             strip.addView(imageView)
 
-            if (uri != null) {
-                val durationMs = item.durationMs.coerceAtLeast(1000L)
-                val progress = frameIndex.toFloat() / frameCount.toFloat()
-                val frameTimeUs = (durationMs * progress * 1000L).toLong()
+            if (uri != null && thumbnailProvider.canReadUri(uri)) {
+                val progress = if (frameCount == 1) {
+                    0f
+                } else {
+                    frameIndex.toFloat() / (frameCount - 1).toFloat()
+                }
+
+                val frameTimeUs = (durationMs * progress * 1000L).toLong().coerceAtLeast(0L)
+                val requestKey = "${item.timelineKey()}|video|$frameIndex|$frameTimeUs"
+                imageView.tag = requestKey
 
                 lifecycleScope.launch {
-                    val bitmap = thumbnailProvider.getVideoFrameAtTime(uri, frameTimeUs)
-                    if (bitmap != null) {
+                    val bitmap = thumbnailProvider.getVideoFrameAtTime(
+                        uri = uri,
+                        timeUs = frameTimeUs
+                    )
+                    if (imageView.tag == requestKey && bitmap != null) {
                         imageView.setImageBitmap(bitmap)
                     }
                 }
@@ -292,7 +361,7 @@ class TimelineRenderer(
     }
 
     /**
-     * Renderiza una pista visual de audio externa si existen elementos de tipo audio.
+     * Renderiza pista de audio externa si existe.
      */
     private fun renderExternalAudioTrackIfNeeded(items: List<TimelineItemEntity>) {
         val externalAudioItems = items.filter { it.type == "audio" }
@@ -323,7 +392,7 @@ class TimelineRenderer(
     }
 
     /**
-     * Crea una barra decorativa para la onda de audio.
+     * Crea una barra decorativa para onda de audio.
      */
     private fun createAudioWaveBar(index: Int): View {
         val heightsDp = listOf(10, 16, 8, 20, 12, 24, 11, 18, 9, 22, 14, 19)
