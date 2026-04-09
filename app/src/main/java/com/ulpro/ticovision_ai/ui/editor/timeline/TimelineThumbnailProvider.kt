@@ -24,9 +24,11 @@ class TimelineThumbnailProvider(
 ) {
 
     private val thumbnailMemoryCache by lazy {
-        object : LruCache<String, Bitmap>(
-            (Runtime.getRuntime().maxMemory() / 1024L / 16L).toInt()
-        ) {
+        // Calculamos el tamaño máximo del caché en KB, protegiendo contra overflow de Int
+        val maxMemoryKb = Runtime.getRuntime().maxMemory() / 1024L
+        val cacheMaxSizeKb = (maxMemoryKb / 16L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+
+        object : LruCache<String, Bitmap>(cacheMaxSizeKb) {
             override fun sizeOf(key: String, value: Bitmap): Int {
                 return value.byteCount / 1024
             }
@@ -242,11 +244,11 @@ class TimelineThumbnailProvider(
         var inSampleSize = 1
 
         if (srcHeight > reqHeight || srcWidth > reqWidth) {
-            var halfHeight = srcHeight / 2
-            var halfWidth = srcWidth / 2
-
-            while ((halfHeight / inSampleSize) >= reqHeight &&
-                (halfWidth / inSampleSize) >= reqWidth
+            // Usamos directamente srcHeight/srcWidth con inSampleSize,
+            // sin preasignar variables "half" que nunca se actualizaban
+            while (
+                (srcHeight / (inSampleSize * 2)) >= reqHeight &&
+                (srcWidth / (inSampleSize * 2)) >= reqWidth
             ) {
                 inSampleSize *= 2
             }
