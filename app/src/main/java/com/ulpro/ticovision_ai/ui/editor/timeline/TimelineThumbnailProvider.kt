@@ -24,9 +24,10 @@ class TimelineThumbnailProvider(
 ) {
 
     private val thumbnailMemoryCache by lazy {
-        // Calculamos el tamaño máximo del caché en KB, protegiendo contra overflow de Int
         val maxMemoryKb = Runtime.getRuntime().maxMemory() / 1024L
-        val cacheMaxSizeKb = (maxMemoryKb / 16L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        val cacheMaxSizeKb = (maxMemoryKb / 16L)
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
 
         object : LruCache<String, Bitmap>(cacheMaxSizeKb) {
             override fun sizeOf(key: String, value: Bitmap): Int {
@@ -61,8 +62,8 @@ class TimelineThumbnailProvider(
     suspend fun getVideoFrameAtTime(
         uri: Uri,
         timeUs: Long,
-        targetWidth: Int = 220,
-        targetHeight: Int = 220
+        targetWidth: Int = 160,
+        targetHeight: Int = 160
     ): Bitmap? = withContext(Dispatchers.IO) {
         val safeTimeUs = timeUs.coerceAtLeast(0L)
         val cacheKey = "video|$uri|$safeTimeUs|$targetWidth|$targetHeight"
@@ -110,8 +111,8 @@ class TimelineThumbnailProvider(
         return getVideoFrameAtTime(
             uri = uri,
             timeUs = 1_000_000L,
-            targetWidth = 220,
-            targetHeight = 220
+            targetWidth = 160,
+            targetHeight = 160
         )
     }
 
@@ -120,8 +121,8 @@ class TimelineThumbnailProvider(
      */
     suspend fun getImageThumbnail(
         uri: Uri,
-        targetWidth: Int = 220,
-        targetHeight: Int = 220
+        targetWidth: Int = 160,
+        targetHeight: Int = 160
     ): Bitmap? = withContext(Dispatchers.IO) {
         val cacheKey = "image|$uri|$targetWidth|$targetHeight"
 
@@ -244,8 +245,6 @@ class TimelineThumbnailProvider(
         var inSampleSize = 1
 
         if (srcHeight > reqHeight || srcWidth > reqWidth) {
-            // Usamos directamente srcHeight/srcWidth con inSampleSize,
-            // sin preasignar variables "half" que nunca se actualizaban
             while (
                 (srcHeight / (inSampleSize * 2)) >= reqHeight &&
                 (srcWidth / (inSampleSize * 2)) >= reqWidth

@@ -263,8 +263,10 @@ class TimelineRenderer(
         }
 
         val frameWidth = VideoEditorConfig.TIMELINE_IMAGE_FRAME_WIDTH_DP.dp(context).coerceAtLeast(1)
-        val frameCount = (itemWidth / frameWidth).coerceIn(1, 12)
+        val frameCount = (itemWidth / frameWidth).coerceIn(1, 8)
         val uri = item.sourceUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
+
+        val targets = mutableListOf<ImageView>()
 
         repeat(frameCount) { frameIndex ->
             val imageView = ImageView(context).apply {
@@ -280,16 +282,23 @@ class TimelineRenderer(
                 setImageDrawable(null)
             }
 
+            targets.add(imageView)
             strip.addView(imageView)
+        }
 
-            if (uri != null && thumbnailProvider.canReadUri(uri)) {
-                val requestKey = "${item.timelineKey()}|image|$frameIndex"
-                imageView.tag = requestKey
+        if (uri != null && thumbnailProvider.canReadUri(uri)) {
+            val requestKey = "${item.timelineKey()}|image-strip"
+            strip.tag = requestKey
 
-                lifecycleScope.launch {
-                    val bitmap = thumbnailProvider.getImageThumbnail(uri)
-                    if (imageView.tag == requestKey && bitmap != null) {
-                        imageView.setImageBitmap(bitmap)
+            lifecycleScope.launch {
+                val bitmap = thumbnailProvider.getImageThumbnail(
+                    uri = uri,
+                    targetWidth = 160,
+                    targetHeight = 160
+                )
+                if (strip.tag == requestKey && bitmap != null) {
+                    targets.forEach { target ->
+                        target.setImageBitmap(bitmap)
                     }
                 }
             }

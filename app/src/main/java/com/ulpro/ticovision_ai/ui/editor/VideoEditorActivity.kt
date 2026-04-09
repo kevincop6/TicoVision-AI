@@ -59,6 +59,8 @@ class VideoEditorActivity : AppCompatActivity() {
     private var isProgrammaticTimelineScroll: Boolean = false
     private var pendingScrollSeekPositionMs: Long = 0L
     private var isUserScrollingTimeline: Boolean = false
+    private var lastTimelineScrollX: Int = -1
+    private var lastSyncedPreviewItemKey: String? = null
     private val requestMediaPermissionsLauncher =
         registerForActivityResult(RequestMultiplePermissions()) { result ->
             val granted = result.entries.any { it.value }
@@ -444,6 +446,7 @@ class VideoEditorActivity : AppCompatActivity() {
                 MotionEvent.ACTION_DOWN -> {
                     isDraggingPlayhead = false
                     isUserScrollingTimeline = true
+                    lastTimelineScrollX = -1
                 }
 
                 MotionEvent.ACTION_MOVE -> {
@@ -456,6 +459,7 @@ class VideoEditorActivity : AppCompatActivity() {
                     commitTimelineScrollSeek()
                     isUserScrollingTimeline = false
                     isDraggingPlayhead = false
+                    lastTimelineScrollX = -1
                 }
             }
             false
@@ -536,8 +540,10 @@ class VideoEditorActivity : AppCompatActivity() {
 
         val globalPositionMs = TimelineSeekHelper.calculateGlobalPositionFromScroll(
             timelineScrollX = binding.timelineScroll.scrollX,
+            viewportWidth = binding.timelineScroll.width,
             contentWidth = contentWidth,
-            totalDurationMs = totalDuration
+            totalDurationMs = totalDuration,
+            fixedGuideX = 48f
         )
 
         binding.tvTimeCurrent.text = formatDuration(globalPositionMs)
@@ -774,14 +780,23 @@ class VideoEditorActivity : AppCompatActivity() {
     /**
      * Sincroniza el preview con el item actual.
      */
-    private fun syncPreviewWithCurrentItem() {
+    private fun syncPreviewWithCurrentItem(force: Boolean = false) {
         val item = currentTimelineItem
 
         if (item == null) {
+            lastSyncedPreviewItemKey = null
             binding.ivPreviewPlaceholder.setImageDrawable(null)
             updatePreviewVisibility(hasMedia = false)
             return
         }
+
+        val itemKey = item.timelineKey()
+        if (!force && lastSyncedPreviewItemKey == itemKey) {
+            updatePreviewVisibility(hasMedia = true)
+            return
+        }
+
+        lastSyncedPreviewItemKey = itemKey
 
         if (item.type == "image") {
             val imageUri = item.sourceUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
@@ -802,7 +817,7 @@ class VideoEditorActivity : AppCompatActivity() {
      * se conserva el tiempo preview del gesto.
      */
     private fun updateTimeTextsFromPlayer() {
-        if (isUserScrollingTimeline) return
+        if (isUserScrollingTimeline || isDraggingPlayhead) return
 
         if (visualTimelineItems.isEmpty()) {
             binding.tvTimeCurrent.text = formatDuration(0L)
@@ -811,38 +826,41 @@ class VideoEditorActivity : AppCompatActivity() {
         }
 
         val globalPosition = playerController.getGlobalPlaybackPosition()
-
         binding.tvTimeCurrent.text = formatDuration(globalPosition)
         binding.tvTimeTotal.text = formatDuration(totalTimelineDurationMs)
     }
     /**
      * Actualiza únicamente la UI liviana mientras el usuario scrollea el timeline.
      *
-     * Importante:
-     * - No hace seek real en ExoPlayer.
+     * Optimización:
+     * - Evita trabajo repetido si el scrollX no cambió.
+     * - No toca ExoPlayer.
      * - No cambia preview.
-     * - No cambia currentTimelineItem.
-     * - Solo mueve guía y texto de tiempo.
      */
     private fun updateTimelineUiFromScrollPreview() {
         if (visualTimelineItems.isEmpty()) return
 
-        val contentWidth = binding.timelineContent.width.coerceAtLeast(
-            binding.timelineVideoTrack.width
-        )
+        val contentWidth = binding.timelineContent.width
+            .coerceAtLeast(binding.timelineVideoTrack.width)
         if (contentWidth <= 0) return
+
+        val currentScrollX = binding.timelineScroll.scrollX
+        if (currentScrollX == lastTimelineScrollX) return
+        lastTimelineScrollX = currentScrollX
 
         val totalDuration = totalTimelineDurationMs.coerceAtLeast(1L)
 
-        val previewPositionMs = TimelineSeekHelper.calculateGlobalPositionFromScroll(
-            timelineScrollX = binding.timelineScroll.scrollX,
+        val globalPositionMs = TimelineSeekHelper.calculateGlobalPositionFromScroll(
+            timelineScrollX = currentScrollX,
+            viewportWidth = binding.timelineScroll.width,
             contentWidth = contentWidth,
-            totalDurationMs = totalDuration
+            totalDurationMs = totalDuration,
+            fixedGuideX = 48f
         )
 
-        pendingScrollSeekPositionMs = previewPositionMs
-        binding.tvTimeCurrent.text = formatDuration(previewPositionMs)
-        updatePlayhead(previewPositionMs, totalDuration)
+        pendingScrollSeekPositionMs = globalPositionMs
+        binding.tvTimeCurrent.text = formatDuration(globalPositionMs)
+        updatePlayhead(globalPositionMs, totalDuration)
     }
     /**
      * Aplica el seek real al reproductor cuando el usuario termina el scroll.
@@ -851,10 +869,10 @@ class VideoEditorActivity : AppCompatActivity() {
      */
     private fun commitTimelineScrollSeek() {
         if (visualTimelineItems.isEmpty()) return
-        if (playerController.mediaItemCount() == 0) return
+        if (playerController.mediaItemCount() <= 0) return
 
         val targetPositionMs = pendingScrollSeekPositionMs
-            .coerceIn(0L, totalTimelineDurationMs.coerceAtLeast(1L))
+            .coerceIn(0L, totalTimelineDurationMs.coerceAtLeast(0L))
 
         playerController.seekToGlobalPosition(
             globalPositionMs = targetPositionMs,
@@ -863,12 +881,13 @@ class VideoEditorActivity : AppCompatActivity() {
                 currentPlaylistIndex = visualTimelineItems.indexOfFirst {
                     it.timelineKey() == changedItem.timelineKey()
                 }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                syncPreviewWithCurrentItem()
             },
             onUiSyncRequested = {
-                syncPreviewWithCurrentItem()
-                updateTimeTextsFromPlayer()
-                updatePlayheadFromPlayer()
-                renderTimelineSelection()
+                if (!isUserScrollingTimeline && !isDraggingPlayhead) {
+                    updateTimeTextsFromPlayer()
+                    updatePlayheadFromPlayer()
+                }
             }
         )
     }
@@ -937,7 +956,7 @@ class VideoEditorActivity : AppCompatActivity() {
      * no se actualiza para evitar pelear con la UI del gesto.
      */
     private fun updatePlayheadFromPlayer() {
-        if (isUserScrollingTimeline) return
+        if (isUserScrollingTimeline || isDraggingPlayhead) return
 
         val globalPosition = playerController.getGlobalPlaybackPosition()
         updatePlayhead(globalPosition, totalTimelineDurationMs.coerceAtLeast(1L))

@@ -359,7 +359,7 @@ class EditorPlayerController(
                 } catch (e: Exception) {
                     onPlayerError(e)
                 }
-                delay(100L)
+                delay(120L)
             }
         }
     }

@@ -4,15 +4,9 @@ import android.view.View
 import android.widget.HorizontalScrollView
 
 /**
- * Helper de cálculos para arrastre, scroll y posicionamiento del playhead.
+ * Helper de cálculos para arrastre y posicionamiento del playhead.
  */
 object TimelineSeekHelper {
-
-    /**
-     * Distancia fija desde el borde izquierdo visible del timeline
-     * hasta la guía de reproducción.
-     */
-    private const val FIXED_GUIDE_OFFSET_PX = 48f
 
     /**
      * Convierte la posición táctil global en coordenada local dentro del contenido del timeline.
@@ -47,20 +41,23 @@ object TimelineSeekHelper {
     }
 
     /**
-     * Calcula la posición global del timeline tomando como referencia
-     * la guía fija a la izquierda del viewport visible.
+     * Calcula la posición global a partir del scroll del timeline y una guía fija.
      */
     fun calculateGlobalPositionFromScroll(
         timelineScrollX: Int,
+        viewportWidth: Int,
         contentWidth: Int,
-        totalDurationMs: Long
+        totalDurationMs: Long,
+        fixedGuideX: Float
     ): Long {
         if (contentWidth <= 0 || totalDurationMs <= 0L) return 0L
+        if (viewportWidth <= 0) return 0L
 
-        val globalX = (timelineScrollX.toFloat() + FIXED_GUIDE_OFFSET_PX)
+        val safeGuideX = fixedGuideX.coerceIn(0f, viewportWidth.toFloat())
+        val xInContent = (timelineScrollX + safeGuideX)
             .coerceIn(0f, contentWidth.toFloat())
 
-        val progress = globalX / contentWidth.toFloat()
+        val progress = xInContent / contentWidth.toFloat()
 
         return (progress * totalDurationMs)
             .toLong()
@@ -68,11 +65,7 @@ object TimelineSeekHelper {
     }
 
     /**
-     * Actualiza la posición visual del playhead dentro del timeline.
-     *
-     * Importante:
-     * - La guía queda fija en el viewport.
-     * - Esta función NO hace scroll automático.
+     * Actualiza visualmente la guía/playhead sin forzar scroll del timeline.
      */
     fun updatePlayhead(
         timelineContainer: View,
@@ -87,29 +80,26 @@ object TimelineSeekHelper {
     ) {
         if (totalMs <= 0L) return
 
-        timelineContainer.post {
-            val trackWidth = timelineContent.width.coerceAtLeast(timelineVideoTrack.width)
-            if (trackWidth <= 0) return@post
+        val trackWidth = timelineContent.width.coerceAtLeast(timelineVideoTrack.width)
+        if (trackWidth <= 0) return
 
-            val viewportWidth = timelineScroll.width
-            if (viewportWidth <= 0) return@post
+        val viewportWidth = timelineScroll.width
+        if (viewportWidth <= 0) return
 
-            val fixedGuideX = FIXED_GUIDE_OFFSET_PX
-                .coerceAtMost(viewportWidth.toFloat())
+        val fixedGuideX = 48f.coerceAtMost(viewportWidth.toFloat())
 
-            playhead.translationX = fixedGuideX - (playhead.width / 2f)
-            playheadHandle.translationX = fixedGuideX - (playheadHandle.width / 2f)
+        playhead.translationX = fixedGuideX - (playhead.width / 2f)
+        playheadHandle.translationX = fixedGuideX - (playheadHandle.width / 2f)
 
-            if (playhead.visibility != View.VISIBLE) {
-                playhead.visibility = View.VISIBLE
-            }
-
-            if (playheadHandle.visibility != View.VISIBLE) {
-                playheadHandle.visibility = View.VISIBLE
-            }
-
-            playhead.bringToFront()
-            playheadHandle.bringToFront()
+        if (playhead.visibility != View.VISIBLE) {
+            playhead.visibility = View.VISIBLE
         }
+
+        if (playheadHandle.visibility != View.VISIBLE) {
+            playheadHandle.visibility = View.VISIBLE
+        }
+
+        playhead.bringToFront()
+        playheadHandle.bringToFront()
     }
 }
