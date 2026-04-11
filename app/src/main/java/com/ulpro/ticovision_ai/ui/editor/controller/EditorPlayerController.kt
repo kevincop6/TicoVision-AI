@@ -33,10 +33,6 @@ class EditorPlayerController(
     private val player: ExoPlayer = ExoPlayer.Builder(context).build()
     private var playbackUiJob: Job? = null
     private var isVideoMuted: Boolean = false
-
-    // Handler del Main Thread para garantizar que todos los callbacks
-    // de la UI se ejecuten en el hilo correcto, incluyendo los errores
-    // que ExoPlayer dispara desde su hilo interno.
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var currentPlayableEntries: List<PlayableEntry> = emptyList()
@@ -49,13 +45,11 @@ class EditorPlayerController(
         player.addListener(object : Player.Listener {
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                // ExoPlayer puede llamar esto desde su hilo interno
                 mainHandler.post { onIsPlayingChanged(isPlaying) }
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val safeIndex = player.currentMediaItemIndex.coerceAtLeast(0)
-                // Garantizamos ejecución en el Main Thread
                 mainHandler.post { onMediaItemTransition(safeIndex) }
             }
 
@@ -66,9 +60,6 @@ class EditorPlayerController(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                // BUG CRÍTICO CORREGIDO: onPlayerError venía del hilo de ExoPlayer.
-                // Sin mainHandler.post{}, cualquier Toast o acceso a View causaba
-                // CalledFromWrongThreadException -> crash de la Activity.
                 mainHandler.post { onPlayerError(error) }
             }
 
@@ -117,6 +108,18 @@ class EditorPlayerController(
         }
     }
 
+    fun play() {
+        try {
+            if (player.mediaItemCount == 0) {
+                onIsPlayingChanged(false)
+                return
+            }
+            player.play()
+        } catch (e: Exception) {
+            mainHandler.post { onPlayerError(e) }
+        }
+    }
+
     fun pause() {
         try {
             player.pause()
@@ -141,11 +144,154 @@ class EditorPlayerController(
     fun release() {
         try {
             playbackUiJob?.cancel()
-            mainHandler.removeCallbacksAndMessages(null) // Limpia handlers pendientes
+            mainHandler.removeCallbacksAndMessages(null)
             currentPlayableEntries = emptyList()
             player.release()
+        } catch (_: Exception) {
+        }
+    }
+
+    fun prepareTimelinePlaylist(
+        timelineItems: List<TimelineItemEntity>,
+        startIndex: Int,
+        startPositionMs: Long,
+        autoPlay: Boolean,
+        isVideoMuted: Boolean,
+        onTimelineItemChanged: (TimelineItemEntity, Int) -> Unit,
+        onUiSyncRequested: () -> Unit
+    ) {
+        try {
+            if (timelineItems.isEmpty()) {
+                player.pause()
+                player.clearMediaItems()
+                currentPlayableEntries = emptyList()
+                onIsPlayingChanged(false)
+                return
+            }
+
+            val playableEntries = buildPlayableEntries(timelineItems)
+
+            if (playableEntries.isEmpty()) {
+                player.pause()
+                player.clearMediaItems()
+                currentPlayableEntries = emptyList()
+                onIsPlayingChanged(false)
+                mainHandler.post {
+                    onPlayerError(
+                        IllegalStateException("No hay clips válidos del timeline para reproducir.")
+                    )
+                }
+                return
+            }
+
+            val safeStartIndex = startIndex.coerceIn(0, timelineItems.lastIndex)
+            val requestedKey = buildItemKey(timelineItems[safeStartIndex])
+            val mappedPlayableIndex = playableEntries.indexOfFirst { it.sourceKey == requestedKey }
+                .takeIf { it >= 0 } ?: 0
+
+            val mediaItems = playableEntries.map { it.mediaItem }
+
+            playbackUiJob?.cancel()
+            player.pause()
+            player.clearMediaItems()
+            currentPlayableEntries = playableEntries
+
+            player.setMediaItems(mediaItems, mappedPlayableIndex, startPositionMs.coerceAtLeast(0L))
+            player.prepare()
+            player.playWhenReady = autoPlay
+
+            this.isVideoMuted = isVideoMuted
+            player.volume = if (isVideoMuted) 0f else 1f
+
+            onTimelineItemChanged(
+                currentPlayableEntries[mappedPlayableIndex].sourceItem,
+                mappedPlayableIndex
+            )
+
+            onUiSyncRequested()
+            startPlaybackUiSync(onUiSyncRequested)
         } catch (e: Exception) {
-            // En release no reenviamos al handler porque la Activity puede estar destruida
+            mainHandler.post { onPlayerError(e) }
+        }
+    }
+
+    fun seekToGlobalPosition(
+        globalPositionMs: Long,
+        onTimelineItemChanged: (TimelineItemEntity, Int) -> Unit,
+        onUiSyncRequested: () -> Unit
+    ) {
+        try {
+            if (currentPlayableEntries.isEmpty()) return
+            if (player.mediaItemCount == 0) return
+
+            val totalDuration = currentPlayableEntries.sumOf {
+                it.sourceItem.durationMs.coerceAtLeast(0L)
+            }
+            val safeGlobal = globalPositionMs.coerceIn(0L, totalDuration.coerceAtLeast(0L))
+            val (targetIndex, localPositionMs) = findClipIndexAndLocalPosition(safeGlobal)
+            val safeTargetIndex = targetIndex.coerceIn(0, currentPlayableEntries.lastIndex)
+
+            if (safeTargetIndex >= player.mediaItemCount) {
+                mainHandler.post {
+                    onPlayerError(
+                        IndexOutOfBoundsException(
+                            "Índice fuera de rango. targetIndex=$safeTargetIndex mediaItemCount=${player.mediaItemCount}"
+                        )
+                    )
+                }
+                return
+            }
+
+            onTimelineItemChanged(currentPlayableEntries[safeTargetIndex].sourceItem, safeTargetIndex)
+
+            if (player.currentMediaItemIndex != safeTargetIndex) {
+                player.seekTo(safeTargetIndex, localPositionMs)
+            } else {
+                player.seekTo(localPositionMs)
+            }
+
+            onUiSyncRequested()
+        } catch (e: Exception) {
+            mainHandler.post { onPlayerError(e) }
+        }
+    }
+
+    fun getGlobalPlaybackPosition(): Long {
+        return try {
+            if (currentPlayableEntries.isEmpty()) return 0L
+            if (player.mediaItemCount == 0) return 0L
+
+            val safeCurrentIndex = player.currentMediaItemIndex.coerceIn(0, currentPlayableEntries.lastIndex)
+
+            var accumulated = 0L
+            for (index in 0 until safeCurrentIndex) {
+                accumulated += currentPlayableEntries[index].sourceItem.durationMs.coerceAtLeast(0L)
+            }
+            accumulated + player.currentPosition.coerceAtLeast(0L)
+        } catch (e: Exception) {
+            mainHandler.post { onPlayerError(e) }
+            0L
+        }
+    }
+
+    fun getCurrentPlayableDurationMs(): Long {
+        return currentPlayableEntries.sumOf { it.sourceItem.durationMs.coerceAtLeast(0L) }
+    }
+
+    private fun startPlaybackUiSync(onUiSyncRequested: () -> Unit) {
+        playbackUiJob?.cancel()
+
+        playbackUiJob = lifecycleScope.launch {
+            while (isActive) {
+                try {
+                    if (player.mediaItemCount > 0 && player.isPlaying) {
+                        onUiSyncRequested()
+                    }
+                } catch (e: Exception) {
+                    mainHandler.post { onPlayerError(e) }
+                }
+                delay(120L)
+            }
         }
     }
 
@@ -199,95 +345,9 @@ class EditorPlayerController(
         }
     }
 
-    fun prepareTimelinePlaylist(
-        timelineItems: List<TimelineItemEntity>,
-        startIndex: Int,
-        startPositionMs: Long,
-        autoPlay: Boolean,
-        isVideoMuted: Boolean,
-        onTimelineItemChanged: (TimelineItemEntity, Int) -> Unit,
-        onUiSyncRequested: () -> Unit
-    ) {
-        try {
-            if (timelineItems.isEmpty()) {
-                player.pause()
-                player.clearMediaItems()
-                currentPlayableEntries = emptyList()
-                onIsPlayingChanged(false)
-                return
-            }
-
-            val playableEntries = buildPlayableEntries(timelineItems)
-
-            if (playableEntries.isEmpty()) {
-                player.pause()
-                player.clearMediaItems()
-                currentPlayableEntries = emptyList()
-                onIsPlayingChanged(false)
-                // BUG SECUNDARIO CORREGIDO: antes faltaba return después de onPlayerError,
-                // lo que causaba que se ejecutara setMediaItems() con lista vacía.
-                mainHandler.post {
-                    onPlayerError(
-                        IllegalStateException("No hay clips válidos del timeline para reproducir.")
-                    )
-                }
-                return // ← Este return faltaba
-            }
-
-            val safeStartIndex = startIndex.coerceIn(0, timelineItems.lastIndex)
-            val requestedKey = buildItemKey(timelineItems[safeStartIndex])
-            val mappedPlayableIndex = playableEntries
-                .indexOfFirst { it.sourceKey == requestedKey }
-                .takeIf { it >= 0 } ?: 0
-
-            val mediaItems = playableEntries.map { it.mediaItem }
-            playbackUiJob?.cancel()
-
-            player.pause()
-            player.clearMediaItems()
-            currentPlayableEntries = playableEntries
-
-            player.setMediaItems(mediaItems, mappedPlayableIndex, startPositionMs.coerceAtLeast(0L))
-            player.prepare()
-            player.playWhenReady = autoPlay
-
-            this.isVideoMuted = isVideoMuted
-            player.volume = if (isVideoMuted) 0f else 1f
-
-            onTimelineItemChanged(
-                currentPlayableEntries[mappedPlayableIndex].sourceItem,
-                mappedPlayableIndex
-            )
-
-            onUiSyncRequested()
-            startPlaybackUiSync(onUiSyncRequested)
-
-        } catch (e: Exception) {
-            mainHandler.post { onPlayerError(e) }
-        }
-    }
-
-    fun getGlobalPlaybackPosition(): Long {
-        return try {
-            if (currentPlayableEntries.isEmpty()) return 0L
-            if (player.mediaItemCount == 0) return 0L
-
-            val safeCurrentIndex = player.currentMediaItemIndex
-                .coerceIn(0, currentPlayableEntries.lastIndex)
-
-            var accumulated = 0L
-            for (index in 0 until safeCurrentIndex) {
-                accumulated += currentPlayableEntries[index].sourceItem.durationMs.coerceAtLeast(0L)
-            }
-            accumulated + player.currentPosition.coerceAtLeast(0L)
-        } catch (e: Exception) {
-            mainHandler.post { onPlayerError(e) }
-            0L
-        }
-    }
-
     private fun findClipIndexAndLocalPosition(globalPositionMs: Long): Pair<Int, Long> {
         if (currentPlayableEntries.isEmpty()) return 0 to 0L
+
         var accumulated = 0L
         currentPlayableEntries.forEachIndexed { index, entry ->
             val duration = entry.sourceItem.durationMs.coerceAtLeast(0L)
@@ -297,71 +357,9 @@ class EditorPlayerController(
             }
             accumulated = clipEnd
         }
+
         val lastIndex = currentPlayableEntries.lastIndex
         return lastIndex to currentPlayableEntries[lastIndex].sourceItem.durationMs.coerceAtLeast(0L)
-    }
-
-    fun seekToGlobalPosition(
-        globalPositionMs: Long,
-        onTimelineItemChanged: (TimelineItemEntity, Int) -> Unit,
-        onUiSyncRequested: () -> Unit
-    ) {
-        try {
-            if (currentPlayableEntries.isEmpty()) return
-            if (player.mediaItemCount == 0) return
-
-            val totalDuration = currentPlayableEntries.sumOf {
-                it.sourceItem.durationMs.coerceAtLeast(0L)
-            }
-            val safeGlobal = globalPositionMs.coerceIn(0L, totalDuration.coerceAtLeast(0L))
-            val (targetIndex, localPositionMs) = findClipIndexAndLocalPosition(safeGlobal)
-            val safeTargetIndex = targetIndex.coerceIn(0, currentPlayableEntries.lastIndex)
-
-            if (safeTargetIndex >= player.mediaItemCount) {
-                mainHandler.post {
-                    onPlayerError(
-                        IndexOutOfBoundsException(
-                            "Índice fuera de rango. targetIndex=$safeTargetIndex " +
-                                    "mediaItemCount=${player.mediaItemCount}"
-                        )
-                    )
-                }
-                return
-            }
-
-            onTimelineItemChanged(currentPlayableEntries[safeTargetIndex].sourceItem, safeTargetIndex)
-
-            if (player.currentMediaItemIndex != safeTargetIndex) {
-                player.seekTo(safeTargetIndex, localPositionMs)
-            } else {
-                player.seekTo(localPositionMs)
-            }
-
-            onUiSyncRequested()
-        } catch (e: Exception) {
-            mainHandler.post { onPlayerError(e) }
-        }
-    }
-
-    fun getCurrentPlayableDurationMs(): Long {
-        return currentPlayableEntries.sumOf { it.sourceItem.durationMs.coerceAtLeast(0L) }
-    }
-
-    private fun startPlaybackUiSync(onUiSyncRequested: () -> Unit) {
-        playbackUiJob?.cancel()
-
-        playbackUiJob = lifecycleScope.launch {
-            while (isActive) {
-                try {
-                    if (player.mediaItemCount > 0 && player.isPlaying) {
-                        onUiSyncRequested()
-                    }
-                } catch (e: Exception) {
-                    onPlayerError(e)
-                }
-                delay(120L)
-            }
-        }
     }
 
     private data class PlayableEntry(
@@ -369,19 +367,4 @@ class EditorPlayerController(
         val sourceKey: String,
         val mediaItem: MediaItem
     )
-
-    /**
-     * Inicia reproducción explícitamente si hay contenido cargado.
-     */
-    fun play() {
-        try {
-            if (player.mediaItemCount == 0) {
-                onIsPlayingChanged(false)
-                return
-            }
-            player.play()
-        } catch (e: Exception) {
-            onPlayerError(e)
-        }
-    }
 }

@@ -8,6 +8,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.ulpro.ticovision_ai.R
@@ -17,23 +18,21 @@ import com.ulpro.ticovision_ai.data.repository.ProjectRepository
 import com.ulpro.ticovision_ai.databinding.ActivityVideoEditorBinding
 import com.ulpro.ticovision_ai.ui.editor.controller.EditorActionTagController
 import com.ulpro.ticovision_ai.ui.editor.controller.EditorAutoSaveController
+import com.ulpro.ticovision_ai.ui.editor.controller.EditorExportController
 import com.ulpro.ticovision_ai.ui.editor.controller.EditorMediaPickerManager
 import com.ulpro.ticovision_ai.ui.editor.controller.EditorPermissionManager
 import com.ulpro.ticovision_ai.ui.editor.controller.EditorPlayerController
 import com.ulpro.ticovision_ai.ui.editor.logging.EditorErrorReportManager
 import com.ulpro.ticovision_ai.ui.editor.timeline.TimelineRenderer
 import com.ulpro.ticovision_ai.ui.editor.timeline.TimelineSeekHelper
-import com.ulpro.ticovision_ai.ui.editor.timeline.TimelineThumbnailProvider
 import com.ulpro.ticovision_ai.ui.editor.util.formatDuration
 import com.ulpro.ticovision_ai.ui.editor.util.takeReadUriPermissionSafely
 import com.ulpro.ticovision_ai.ui.editor.util.timelineKey
+import com.ulpro.ticovisionai.ui.editor.timeline.TimelineThumbnailProvider
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.OnBackPressedDispatcher
 import kotlinx.coroutines.launch
-import androidx.appcompat.app.AlertDialog
-/**
- * Pantalla principal del editor de video.
- *
- * Adaptada al nuevo EditorPlayerController y al nuevo TimelineThumbnailProvider.
- */
+
 class VideoEditorActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityVideoEditorBinding
@@ -46,6 +45,7 @@ class VideoEditorActivity : AppCompatActivity() {
     private lateinit var thumbnailProvider: TimelineThumbnailProvider
     private lateinit var timelineRenderer: TimelineRenderer
     private lateinit var playerController: EditorPlayerController
+    private lateinit var exportController: EditorExportController
     private lateinit var errorReportManager: EditorErrorReportManager
 
     private var projectId: Long = VideoEditorConfig.INVALID_PROJECT_ID
@@ -56,11 +56,14 @@ class VideoEditorActivity : AppCompatActivity() {
     private var totalTimelineDurationMs: Long = 0L
     private var isDraggingPlayhead: Boolean = false
     private var isTimelineScrollSeeking: Boolean = false
-    private var isProgrammaticTimelineScroll: Boolean = false
     private var pendingScrollSeekPositionMs: Long = 0L
     private var isUserScrollingTimeline: Boolean = false
     private var lastTimelineScrollX: Int = -1
     private var lastSyncedPreviewItemKey: String? = null
+    private var lastRenderedTimelineSignature: String = ""
+    private var lastSelectionSignature: String = ""
+    private var isExporting: Boolean = false
+
     private val requestMediaPermissionsLauncher =
         registerForActivityResult(RequestMultiplePermissions()) { result ->
             val granted = result.entries.any { it.value }
@@ -77,7 +80,7 @@ class VideoEditorActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         initializeDependencies()
-
+        setupBackNavigation()
         projectId = intent.getLongExtra(
             VideoEditorConfig.EXTRA_PROJECT_ID,
             VideoEditorConfig.INVALID_PROJECT_ID
@@ -94,9 +97,6 @@ class VideoEditorActivity : AppCompatActivity() {
         startAutoSaveIfPossible()
     }
 
-    /**
-     * Inicializa base de datos y repositorio.
-     */
     private fun initializeDependencies() {
         val database = TicoVisionDatabase.getInstance(applicationContext)
         repository = ProjectRepository(
@@ -107,9 +107,6 @@ class VideoEditorActivity : AppCompatActivity() {
         errorReportManager = EditorErrorReportManager(this)
     }
 
-    /**
-     * Inicializa controladores del editor.
-     */
     private fun initializeControllers() {
         permissionManager = EditorPermissionManager(this)
         actionTagController = EditorActionTagController(binding, lifecycleScope)
@@ -124,9 +121,8 @@ class VideoEditorActivity : AppCompatActivity() {
             }
         )
 
-        thumbnailProvider = TimelineThumbnailProvider(
-            context = this
-        )
+        thumbnailProvider = TimelineThumbnailProvider(this)
+        exportController = EditorExportController(this)
 
         timelineRenderer = TimelineRenderer(
             context = this,
@@ -134,64 +130,10 @@ class VideoEditorActivity : AppCompatActivity() {
             lifecycleScope = lifecycleScope,
             thumbnailProvider = thumbnailProvider,
             onVideoItemSelected = { item, index ->
-                currentTimelineItem = item
-                currentPlaylistIndex = index.coerceAtLeast(0)
-
-                playerController.prepareTimelinePlaylist(
-                    timelineItems = visualTimelineItems,
-                    startIndex = currentPlaylistIndex,
-                    startPositionMs = 0L,
-                    autoPlay = false,
-                    isVideoMuted = playerController.isMuted(),
-                    onTimelineItemChanged = { changedItem, playableIndex ->
-                        currentTimelineItem = changedItem
-                        currentPlaylistIndex = visualTimelineItems.indexOfFirst {
-                            it.timelineKey() == changedItem.timelineKey()
-                        }.coerceAtLeast(playableIndex.coerceAtLeast(0))
-                        syncPreviewWithCurrentItem()
-                        renderTimelineSelection()
-                    },
-                    onUiSyncRequested = {
-                        syncPreviewWithCurrentItem()
-                        updateTimeTextsFromPlayer()
-                        updatePlayheadFromPlayer()
-                        renderTimelineSelection()
-                    }
-                )
-
-                syncPreviewWithCurrentItem()
-                renderTimelineSelection()
-                actionTagController.showTemporaryAction("Clip seleccionado")
+                selectTimelineItemAndPreparePlayback(item, index, "Clip seleccionado")
             },
             onImageItemSelected = { item, index ->
-                currentTimelineItem = item
-                currentPlaylistIndex = index.coerceAtLeast(0)
-
-                playerController.prepareTimelinePlaylist(
-                    timelineItems = visualTimelineItems,
-                    startIndex = currentPlaylistIndex,
-                    startPositionMs = 0L,
-                    autoPlay = false,
-                    isVideoMuted = playerController.isMuted(),
-                    onTimelineItemChanged = { changedItem, playableIndex ->
-                        currentTimelineItem = changedItem
-                        currentPlaylistIndex = visualTimelineItems.indexOfFirst {
-                            it.timelineKey() == changedItem.timelineKey()
-                        }.coerceAtLeast(playableIndex.coerceAtLeast(0))
-                        syncPreviewWithCurrentItem()
-                        renderTimelineSelection()
-                    },
-                    onUiSyncRequested = {
-                        syncPreviewWithCurrentItem()
-                        updateTimeTextsFromPlayer()
-                        updatePlayheadFromPlayer()
-                        renderTimelineSelection()
-                    }
-                )
-
-                syncPreviewWithCurrentItem()
-                renderTimelineSelection()
-                actionTagController.showTemporaryAction("Imagen seleccionada")
+                selectTimelineItemAndPreparePlayback(item, index, "Imagen seleccionada")
             }
         )
 
@@ -204,23 +146,22 @@ class VideoEditorActivity : AppCompatActivity() {
             },
             onMediaItemTransition = { newIndex ->
                 val playableItems = playerController.getCurrentPlayableTimelineItems()
-
                 if (newIndex in playableItems.indices) {
                     val newItem = playableItems[newIndex]
                     currentTimelineItem = newItem
                     currentPlaylistIndex = visualTimelineItems.indexOfFirst {
                         it.timelineKey() == newItem.timelineKey()
-                    }.coerceAtLeast(0)
+                    }.takeIf { it >= 0 } ?: 0
                 }
-
                 syncPreviewWithCurrentItem()
-                renderTimelineSelection()
+                refreshTimelineSelectionOnly()
                 updateTimeTextsFromPlayer()
                 updatePlayheadFromPlayer()
             },
             onPlaybackEnded = {
                 updatePlayPauseIcon(false)
                 syncPreviewWithCurrentItem()
+                refreshTimelineSelectionOnly()
                 updateTimeTextsFromPlayer()
                 updatePlayhead(
                     totalTimelineDurationMs,
@@ -228,10 +169,11 @@ class VideoEditorActivity : AppCompatActivity() {
                 )
             },
             onPositionRelevantEvent = {
-                syncPreviewWithCurrentItem()
-                updateTimeTextsFromPlayer()
-                updatePlayheadFromPlayer()
-                renderTimelineSelection()
+                if (!isTimelineScrollSeeking && !isUserScrollingTimeline && !isDraggingPlayhead) {
+                    syncPreviewWithCurrentItem()
+                    updateTimeTextsFromPlayer()
+                    updatePlayheadFromPlayer()
+                }
             },
             onPlayerError = { throwable ->
                 saveDebugReport(
@@ -257,11 +199,46 @@ class VideoEditorActivity : AppCompatActivity() {
         )
     }
 
-    /**
-     * Configura la barra superior.
-     */
+    private fun selectTimelineItemAndPreparePlayback(
+        item: TimelineItemEntity,
+        index: Int,
+        message: String
+    ) {
+        currentTimelineItem = item
+        currentPlaylistIndex = index.coerceAtLeast(0)
+
+        playerController.prepareTimelinePlaylist(
+            timelineItems = visualTimelineItems,
+            startIndex = currentPlaylistIndex,
+            startPositionMs = 0L,
+            autoPlay = false,
+            isVideoMuted = playerController.isMuted(),
+            onTimelineItemChanged = { changedItem, playableIndex ->
+                currentTimelineItem = changedItem
+                currentPlaylistIndex = visualTimelineItems.indexOfFirst {
+                    it.timelineKey() == changedItem.timelineKey()
+                }.takeIf { it >= 0 } ?: playableIndex.coerceAtLeast(0)
+                syncPreviewWithCurrentItem()
+                refreshTimelineSelectionOnly()
+            },
+            onUiSyncRequested = {
+                syncPreviewWithCurrentItem()
+                updateTimeTextsFromPlayer()
+                updatePlayheadFromPlayer()
+            }
+        )
+
+        syncPreviewWithCurrentItem()
+        refreshTimelineSelectionOnly()
+        actionTagController.showTemporaryAction(message)
+    }
+
     private fun setupToolbar() {
         binding.btnBack.setOnClickListener {
+            if (!canLeaveEditorScreen()) {
+                actionTagController.showTemporaryAction("Esperá a que termine la exportación")
+                return@setOnClickListener
+            }
             finish()
         }
 
@@ -270,25 +247,77 @@ class VideoEditorActivity : AppCompatActivity() {
         }
 
         binding.btnExport.setOnClickListener {
-            actionTagController.showTemporaryAction(getString(R.string.msg_export_pending))
+            if (isExporting) {
+                actionTagController.showTemporaryAction("Ya hay una exportación en proceso")
+                return@setOnClickListener
+            }
+
+            when (val validation = exportController.validateExportableTimeline(timelineItems)) {
+                is EditorExportController.ValidationResult.Invalid -> {
+                    actionTagController.showTemporaryAction(validation.reason)
+                    return@setOnClickListener
+                }
+                EditorExportController.ValidationResult.Valid -> Unit
+            }
+
+            lifecycleScope.launch {
+                try {
+                    setExportUiState(true)
+                    playerController.pause()
+                    updatePlayPauseIcon(false)
+
+                    exportController.exportTimeline(
+                        timelineItems = timelineItems,
+                        onExportStarted = {
+                            actionTagController.showTemporaryAction("Exportando video...")
+                        },
+                        onExportCompleted = { output ->
+                            actionTagController.showTemporaryAction("Exportación finalizada")
+
+                            val resultMessage = output.contentUri?.toString()
+                                ?: "Video exportado en: ${output.outputFile.absolutePath}"
+
+                            Toast.makeText(
+                                this@VideoEditorActivity,
+                                resultMessage,
+                                Toast.LENGTH_LONG
+                            ).show()
+                        },
+                        onExportError = { throwable ->
+                            saveDebugReport(
+                                tag = "export_error",
+                                message = "Error exportando timeline",
+                                throwable = throwable,
+                                extraData = mapOf(
+                                    "projectId" to projectId.toString(),
+                                    "timelineItems" to timelineItems.size.toString(),
+                                    "visualTimelineItems" to visualTimelineItems.size.toString(),
+                                    "currentTimelineItemType" to (currentTimelineItem?.type ?: "null"),
+                                    "currentTimelineItemUri" to (currentTimelineItem?.sourceUri ?: "null")
+                                )
+                            )
+
+                            Toast.makeText(
+                                this@VideoEditorActivity,
+                                throwable.message ?: "No se pudo exportar el video",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    )
+                } finally {
+                    setExportUiState(false)
+                }
+            }
         }
     }
 
-    /**
-     * Configura controles principales de preview.
-     */
     private fun setupPreviewControls() {
         binding.btnMute.setOnClickListener {
             val muted = playerController.toggleMute()
             updateMuteIcon(muted)
-
-            val message = if (muted) {
-                "Audio del video silenciado"
-            } else {
-                "Audio del video activado"
-            }
-
-            actionTagController.showTemporaryAction(message)
+            actionTagController.showTemporaryAction(
+                if (muted) "Audio del video silenciado" else "Audio del video activado"
+            )
         }
 
         binding.btnPlayPause.setOnClickListener {
@@ -314,9 +343,9 @@ class VideoEditorActivity : AppCompatActivity() {
                         currentTimelineItem = changedItem
                         currentPlaylistIndex = visualTimelineItems.indexOfFirst {
                             it.timelineKey() == changedItem.timelineKey()
-                        }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                        }.takeIf { it >= 0 } ?: playableIndex.coerceAtLeast(0)
                         syncPreviewWithCurrentItem()
-                        renderTimelineSelection()
+                        refreshTimelineSelectionOnly()
                     },
                     onUiSyncRequested = {
                         syncPreviewWithCurrentItem()
@@ -347,9 +376,6 @@ class VideoEditorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Configura herramientas inferiores.
-     */
     private fun setupBottomTools() {
         binding.toolAudio.setOnClickListener {
             actionTagController.showTemporaryAction(
@@ -381,24 +407,11 @@ class VideoEditorActivity : AppCompatActivity() {
             registerEdit("pip", "Modo PIP agregado")
         }
     }
-    /**
-     * Muestra un diálogo simple para agregar medios visuales al editor.
-     *
-     * Opciones:
-     * - Galería: permite escoger imagen o video desde el selector visual del sistema.
-     * - Tomar foto: abre la cámara para capturar una imagen.
-     * - Grabar video: abre la cámara para capturar un video.
-     *
-     * Se solicita permiso preventivo solo si todavía hace falta según la versión del sistema.
-     */
+
     private fun showAddMediaOptionsDialog() {
         requestMediaPermissionsIfNeeded()
 
-        val options = arrayOf(
-            "Galería",
-            "Tomar foto",
-            "Grabar video"
-        )
+        val options = arrayOf("Galería", "Tomar foto", "Grabar video")
 
         AlertDialog.Builder(this)
             .setTitle("Agregar archivo")
@@ -410,14 +423,12 @@ class VideoEditorActivity : AppCompatActivity() {
                             "Seleccioná una imagen o un video desde la galería"
                         )
                     }
-
                     1 -> {
                         mediaPickerManager.capturePhoto()
                         actionTagController.showTemporaryAction(
                             "Abriendo cámara para tomar foto"
                         )
                     }
-
                     2 -> {
                         mediaPickerManager.captureVideo()
                         actionTagController.showTemporaryAction(
@@ -432,14 +443,7 @@ class VideoEditorActivity : AppCompatActivity() {
             }
             .show()
     }
-    /**
-     * Configura interacción del timeline con scroll liviano y seek diferido.
-     *
-     * Reglas:
-     * - Mientras se hace scroll, no se actualiza ExoPlayer.
-     * - Al terminar el scroll, se hace seek real.
-     * - Arrastrar la guía manualmente sigue permitiendo seek al soltar.
-     */
+
     private fun setupTimelineInteractions() {
         binding.timelineScroll.setOnTouchListener { _, event ->
             when (event.actionMasked) {
@@ -448,11 +452,9 @@ class VideoEditorActivity : AppCompatActivity() {
                     isUserScrollingTimeline = true
                     lastTimelineScrollX = -1
                 }
-
                 MotionEvent.ACTION_MOVE -> {
                     updateTimelineUiFromScrollPreview()
                 }
-
                 MotionEvent.ACTION_UP,
                 MotionEvent.ACTION_CANCEL -> {
                     updateTimelineUiFromScrollPreview()
@@ -483,7 +485,6 @@ class VideoEditorActivity : AppCompatActivity() {
                     movePlayheadFromTouch(contentX, false)
                     true
                 }
-
                 MotionEvent.ACTION_MOVE -> {
                     val contentX = TimelineSeekHelper.getTimelineTouchXInsideContent(
                         timelineContent = binding.timelineContent,
@@ -494,7 +495,6 @@ class VideoEditorActivity : AppCompatActivity() {
                     movePlayheadFromTouch(contentX, false)
                     true
                 }
-
                 MotionEvent.ACTION_UP,
                 MotionEvent.ACTION_CANCEL -> {
                     val contentX = TimelineSeekHelper.getTimelineTouchXInsideContent(
@@ -509,7 +509,6 @@ class VideoEditorActivity : AppCompatActivity() {
                     binding.timelineScroll.parent?.requestDisallowInterceptTouchEvent(false)
                     true
                 }
-
                 else -> false
             }
         }
@@ -517,61 +516,7 @@ class VideoEditorActivity : AppCompatActivity() {
         binding.playhead.setOnTouchListener(dragListener)
         binding.playheadHandle.setOnTouchListener(dragListener)
     }
-    /**
-     * Sincroniza el seek del reproductor usando la posición visible del timeline.
-     *
-     * La referencia es la guía fija a la izquierda. Por eso la posición activa
-     * se calcula a partir del scroll horizontal visible y no de una guía móvil.
-     *
-     * Importante:
-     * - No dispara reproducción automática.
-     * - Solo actualiza posición, selección y preview.
-     */
-    private fun syncSeekFromTimelineScroll() {
-        if (visualTimelineItems.isEmpty()) return
-        if (playerController.mediaItemCount() == 0) return
 
-        val contentWidth = binding.timelineContent.width.coerceAtLeast(
-            binding.timelineVideoTrack.width
-        )
-        if (contentWidth <= 0) return
-
-        val totalDuration = totalTimelineDurationMs.coerceAtLeast(1L)
-
-        val globalPositionMs = TimelineSeekHelper.calculateGlobalPositionFromScroll(
-            timelineScrollX = binding.timelineScroll.scrollX,
-            viewportWidth = binding.timelineScroll.width,
-            contentWidth = contentWidth,
-            totalDurationMs = totalDuration,
-            fixedGuideX = 48f
-        )
-
-        binding.tvTimeCurrent.text = formatDuration(globalPositionMs)
-        updatePlayhead(globalPositionMs, totalDuration)
-
-        isTimelineScrollSeeking = true
-
-        playerController.seekToGlobalPosition(
-            globalPositionMs = globalPositionMs,
-            onTimelineItemChanged = { changedItem, playableIndex ->
-                currentTimelineItem = changedItem
-                currentPlaylistIndex = visualTimelineItems.indexOfFirst {
-                    it.timelineKey() == changedItem.timelineKey()
-                }.coerceAtLeast(playableIndex.coerceAtLeast(0))
-
-                syncPreviewWithCurrentItem()
-            },
-            onUiSyncRequested = {
-                updateTimeTextsFromPlayer()
-                updatePlayheadFromPlayer()
-                renderTimelineSelection()
-                isTimelineScrollSeeking = false
-            }
-        )
-    }
-    /**
-     * Solicita permisos si todavía no han sido concedidos.
-     */
     private fun requestMediaPermissionsIfNeeded() {
         val permissions = permissionManager.getRequiredMediaPermissions()
         if (permissions.isEmpty()) return
@@ -584,9 +529,6 @@ class VideoEditorActivity : AppCompatActivity() {
         requestMediaPermissionsLauncher.launch(permissions)
     }
 
-    /**
-     * Procesa la selección de un video y lo agrega al timeline.
-     */
     private fun handleSelectedVideo(uri: Uri) {
         if (projectId == VideoEditorConfig.INVALID_PROJECT_ID) {
             renderInvalidProject()
@@ -597,7 +539,7 @@ class VideoEditorActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val durationMs = thumbnailProvider.getVideoDuration(uri)
+                val durationMs = thumbnailProvider.getVideoDuration(uri).coerceAtLeast(1L)
 
                 repository.addVideoToTimeline(
                     projectId = projectId,
@@ -636,9 +578,6 @@ class VideoEditorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Procesa la selección de una imagen y la agrega como clip real al timeline.
-     */
     private fun handleSelectedImage(uri: Uri) {
         if (projectId == VideoEditorConfig.INVALID_PROJECT_ID) {
             renderInvalidProject()
@@ -686,17 +625,18 @@ class VideoEditorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Restaura el timeline desde base de datos y sincroniza preview y player.
-     */
     private fun restoreTimelineAndPreview(playLastAdded: Boolean = false) {
         if (projectId == VideoEditorConfig.INVALID_PROJECT_ID) return
 
         lifecycleScope.launch {
             try {
                 timelineItems = repository.getTimelineItems(projectId)
-                visualTimelineItems = timelineItems.filter { it.type == "video" || it.type == "image" }
-                totalTimelineDurationMs = visualTimelineItems.sumOf { it.durationMs.coerceAtLeast(0L) }
+                visualTimelineItems = timelineItems.filter {
+                    it.type == "video" || it.type == "image"
+                }
+                totalTimelineDurationMs = visualTimelineItems.sumOf {
+                    it.durationMs.coerceAtLeast(0L)
+                }
 
                 if (timelineItems.isEmpty()) {
                     currentTimelineItem = null
@@ -710,11 +650,7 @@ class VideoEditorActivity : AppCompatActivity() {
                     binding.tvTimeCurrent.text = formatDuration(0L)
                     binding.tvTimeTotal.text = formatDuration(0L)
                     updatePlayhead(0L, 1L)
-                    timelineRenderer.renderTimelineItems(
-                        items = timelineItems,
-                        currentTimelineItem = null,
-                        currentPlaylistIndex = 0
-                    )
+                    renderTimelineStructure(force = true)
                     return@launch
                 }
 
@@ -728,11 +664,7 @@ class VideoEditorActivity : AppCompatActivity() {
                     binding.tvTimeCurrent.text = formatDuration(0L)
                     binding.tvTimeTotal.text = formatDuration(0L)
                     updatePlayhead(0L, 1L)
-                    timelineRenderer.renderTimelineItems(
-                        items = timelineItems,
-                        currentTimelineItem = null,
-                        currentPlaylistIndex = 0
-                    )
+                    renderTimelineStructure(force = true)
                     return@launch
                 }
 
@@ -745,6 +677,8 @@ class VideoEditorActivity : AppCompatActivity() {
                 currentPlaylistIndex = selectedIndex
                 currentTimelineItem = visualTimelineItems[selectedIndex]
 
+                renderTimelineStructure(force = true)
+
                 playerController.prepareTimelinePlaylist(
                     timelineItems = visualTimelineItems,
                     startIndex = currentPlaylistIndex,
@@ -755,17 +689,20 @@ class VideoEditorActivity : AppCompatActivity() {
                         currentTimelineItem = changedItem
                         currentPlaylistIndex = visualTimelineItems.indexOfFirst {
                             it.timelineKey() == changedItem.timelineKey()
-                        }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                        }.takeIf { it >= 0 } ?: playableIndex.coerceAtLeast(0)
                         syncPreviewWithCurrentItem()
-                        renderTimelineSelection()
+                        refreshTimelineSelectionOnly()
                     },
                     onUiSyncRequested = {
                         syncPreviewWithCurrentItem()
                         updateTimeTextsFromPlayer()
                         updatePlayheadFromPlayer()
-                        renderTimelineSelection()
                     }
                 )
+
+                syncPreviewWithCurrentItem(force = true)
+                updateTimeTextsFromPlayer()
+                updatePlayheadFromPlayer()
             } catch (e: Exception) {
                 saveDebugReport(
                     tag = "restore_timeline_error",
@@ -777,9 +714,6 @@ class VideoEditorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Sincroniza el preview con el item actual.
-     */
     private fun syncPreviewWithCurrentItem(force: Boolean = false) {
         val item = currentTimelineItem
 
@@ -810,12 +744,6 @@ class VideoEditorActivity : AppCompatActivity() {
         updatePreviewVisibility(hasMedia = true)
     }
 
-    /**
-     * Actualiza etiquetas de tiempo usando la lista reproducible real del player.
-     *
-     * Si el usuario está scrolleando manualmente el timeline,
-     * se conserva el tiempo preview del gesto.
-     */
     private fun updateTimeTextsFromPlayer() {
         if (isUserScrollingTimeline || isDraggingPlayhead) return
 
@@ -829,19 +757,13 @@ class VideoEditorActivity : AppCompatActivity() {
         binding.tvTimeCurrent.text = formatDuration(globalPosition)
         binding.tvTimeTotal.text = formatDuration(totalTimelineDurationMs)
     }
-    /**
-     * Actualiza únicamente la UI liviana mientras el usuario scrollea el timeline.
-     *
-     * Optimización:
-     * - Evita trabajo repetido si el scrollX no cambió.
-     * - No toca ExoPlayer.
-     * - No cambia preview.
-     */
+
     private fun updateTimelineUiFromScrollPreview() {
         if (visualTimelineItems.isEmpty()) return
 
         val contentWidth = binding.timelineContent.width
             .coerceAtLeast(binding.timelineVideoTrack.width)
+
         if (contentWidth <= 0) return
 
         val currentScrollX = binding.timelineScroll.scrollX
@@ -849,7 +771,6 @@ class VideoEditorActivity : AppCompatActivity() {
         lastTimelineScrollX = currentScrollX
 
         val totalDuration = totalTimelineDurationMs.coerceAtLeast(1L)
-
         val globalPositionMs = TimelineSeekHelper.calculateGlobalPositionFromScroll(
             timelineScrollX = currentScrollX,
             viewportWidth = binding.timelineScroll.width,
@@ -862,17 +783,15 @@ class VideoEditorActivity : AppCompatActivity() {
         binding.tvTimeCurrent.text = formatDuration(globalPositionMs)
         updatePlayhead(globalPositionMs, totalDuration)
     }
-    /**
-     * Aplica el seek real al reproductor cuando el usuario termina el scroll.
-     *
-     * Recién aquí se actualiza el item actual, la preview y la selección.
-     */
+
     private fun commitTimelineScrollSeek() {
         if (visualTimelineItems.isEmpty()) return
-        if (playerController.mediaItemCount() <= 0) return
+        if (playerController.mediaItemCount() == 0) return
 
         val targetPositionMs = pendingScrollSeekPositionMs
             .coerceIn(0L, totalTimelineDurationMs.coerceAtLeast(0L))
+
+        isTimelineScrollSeeking = true
 
         playerController.seekToGlobalPosition(
             globalPositionMs = targetPositionMs,
@@ -880,20 +799,20 @@ class VideoEditorActivity : AppCompatActivity() {
                 currentTimelineItem = changedItem
                 currentPlaylistIndex = visualTimelineItems.indexOfFirst {
                     it.timelineKey() == changedItem.timelineKey()
-                }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                }.takeIf { it >= 0 } ?: playableIndex.coerceAtLeast(0)
                 syncPreviewWithCurrentItem()
+                refreshTimelineSelectionOnly()
             },
             onUiSyncRequested = {
                 if (!isUserScrollingTimeline && !isDraggingPlayhead) {
                     updateTimeTextsFromPlayer()
                     updatePlayheadFromPlayer()
                 }
+                isTimelineScrollSeeking = false
             }
         )
     }
-    /**
-     * Mueve el playhead desde el arrastre del usuario.
-     */
+
     private fun movePlayheadFromTouch(rawLocalX: Float, seekPlayer: Boolean) {
         val totalDuration = totalTimelineDurationMs.coerceAtLeast(1L)
         val contentWidth = binding.timelineContent.width.coerceAtLeast(
@@ -919,22 +838,18 @@ class VideoEditorActivity : AppCompatActivity() {
                     currentTimelineItem = changedItem
                     currentPlaylistIndex = visualTimelineItems.indexOfFirst {
                         it.timelineKey() == changedItem.timelineKey()
-                    }.coerceAtLeast(playableIndex.coerceAtLeast(0))
+                    }.takeIf { it >= 0 } ?: playableIndex.coerceAtLeast(0)
                     syncPreviewWithCurrentItem()
-                    renderTimelineSelection()
+                    refreshTimelineSelectionOnly()
                 },
                 onUiSyncRequested = {
                     updateTimeTextsFromPlayer()
                     updatePlayheadFromPlayer()
-                    renderTimelineSelection()
                 }
             )
         }
     }
 
-    /**
-     * Actualiza la posición visual del playhead.
-     */
     private fun updatePlayhead(currentMs: Long, totalMs: Long) {
         TimelineSeekHelper.updatePlayhead(
             timelineContainer = binding.timelineContainer,
@@ -949,51 +864,62 @@ class VideoEditorActivity : AppCompatActivity() {
         )
     }
 
-    /**
-     * Refresca playhead desde la posición real del player.
-     *
-     * Si el usuario está scrolleando manualmente el timeline,
-     * no se actualiza para evitar pelear con la UI del gesto.
-     */
     private fun updatePlayheadFromPlayer() {
         if (isUserScrollingTimeline || isDraggingPlayhead) return
-
         val globalPosition = playerController.getGlobalPlaybackPosition()
         updatePlayhead(globalPosition, totalTimelineDurationMs.coerceAtLeast(1L))
     }
 
-    /**
-     * Renderiza la selección actual del timeline.
-     */
-    private fun renderTimelineSelection() {
+    private fun renderTimelineStructure(force: Boolean = false) {
+        val signature = buildTimelineStructureSignature()
+        if (!force && signature == lastRenderedTimelineSignature) {
+            refreshTimelineSelectionOnly()
+            return
+        }
+
+        lastRenderedTimelineSignature = signature
         timelineRenderer.renderTimelineItems(
             items = timelineItems,
             currentTimelineItem = currentTimelineItem,
             currentPlaylistIndex = currentPlaylistIndex
         )
+        lastSelectionSignature = buildSelectionSignature()
     }
 
-    /**
-     * Cambia el ícono de mute.
-     */
+    private fun refreshTimelineSelectionOnly() {
+        val signature = buildSelectionSignature()
+        if (signature == lastSelectionSignature) return
+
+        timelineRenderer.updateSelectionState(
+            items = timelineItems,
+            currentTimelineItem = currentTimelineItem,
+            currentPlaylistIndex = currentPlaylistIndex
+        )
+        lastSelectionSignature = signature
+    }
+
+    private fun buildTimelineStructureSignature(): String {
+        return timelineItems.joinToString(separator = "|") { item ->
+            "${item.timelineKey()}_${item.type}_${item.durationMs}_${item.sourceUri.orEmpty()}"
+        }
+    }
+
+    private fun buildSelectionSignature(): String {
+        return "${currentTimelineItem?.timelineKey().orEmpty()}_$currentPlaylistIndex"
+    }
+
     private fun updateMuteIcon(isVideoMuted: Boolean) {
         binding.btnMute.setImageResource(
             if (isVideoMuted) R.drawable.ic_volume_off else R.drawable.ic_volume_on
         )
     }
 
-    /**
-     * Cambia el ícono de play o pausa.
-     */
     private fun updatePlayPauseIcon(isPlaying: Boolean) {
         binding.btnPlayPause.setImageResource(
             if (isPlaying) R.drawable.pause_24px else R.drawable.ic_play
         )
     }
 
-    /**
-     * Muestra player o placeholder según el tipo actual.
-     */
     private fun updatePreviewVisibility(hasMedia: Boolean) {
         val item = currentTimelineItem
 
@@ -1012,9 +938,6 @@ class VideoEditorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Carga título y duración base del proyecto.
-     */
     private fun loadProjectInfo() {
         if (projectId == VideoEditorConfig.INVALID_PROJECT_ID) {
             renderInvalidProject()
@@ -1024,7 +947,6 @@ class VideoEditorActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val project = repository.getProjectById(projectId)
-
                 if (project == null) {
                     renderInvalidProject()
                     return@launch
@@ -1051,9 +973,6 @@ class VideoEditorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Registra una edición simple.
-     */
     private fun registerEdit(editType: String, message: String) {
         if (projectId == VideoEditorConfig.INVALID_PROJECT_ID) return
 
@@ -1061,7 +980,10 @@ class VideoEditorActivity : AppCompatActivity() {
             try {
                 repository.addEdit(
                     projectId = projectId,
-                    editType = editType
+                    editType = editType,
+                    startMs = 0L,
+                    endMs = 0L,
+                    extraData = null
                 )
                 actionTagController.showTemporaryAction(message)
             } catch (e: Exception) {
@@ -1078,19 +1000,51 @@ class VideoEditorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Renderiza estado inválido.
-     */
+    private fun setExportUiState(exporting: Boolean) {
+        isExporting = exporting
+
+        binding.btnExport.isEnabled = !exporting
+        binding.btnBack.isEnabled = !exporting
+        binding.btnMore.isEnabled = !exporting
+        binding.btnPlayPause.isEnabled = !exporting
+        binding.btnMute.isEnabled = !exporting
+        binding.btnUndo.isEnabled = !exporting
+        binding.btnRedo.isEnabled = !exporting
+        binding.btnAddTrack.isEnabled = !exporting
+
+        binding.toolAudio.isEnabled = !exporting
+        binding.toolText.isEnabled = !exporting
+        binding.toolAnimate.isEnabled = !exporting
+        binding.toolEffects.isEnabled = !exporting
+        binding.toolShapes.isEnabled = !exporting
+        binding.toolPip.isEnabled = !exporting
+
+        binding.playhead.isEnabled = !exporting
+        binding.playheadHandle.isEnabled = !exporting
+        binding.timelineScroll.isEnabled = !exporting
+
+        binding.btnExport.alpha = if (exporting) 0.5f else 1f
+    }
+
+    private fun canLeaveEditorScreen(): Boolean = !isExporting
+
     private fun renderInvalidProject() {
         currentTimelineItem = null
         currentPlaylistIndex = 0
         timelineItems = emptyList()
         visualTimelineItems = emptyList()
         totalTimelineDurationMs = 0L
+        lastSyncedPreviewItemKey = null
+        lastRenderedTimelineSignature = ""
+        lastSelectionSignature = ""
 
         binding.tvProjectTitle.text = getString(R.string.project_unidentified)
         binding.tvTimeCurrent.text = getString(R.string.time_zero)
         binding.tvTimeTotal.text = getString(R.string.time_zero)
+
+        if (::timelineRenderer.isInitialized) {
+            timelineRenderer.release()
+        }
 
         binding.timelineVideoTrack.removeAllViews()
         binding.audioWaveTrack.removeAllViews()
@@ -1107,13 +1061,26 @@ class VideoEditorActivity : AppCompatActivity() {
         actionTagController.clear()
     }
 
-    /**
-     * Inicia autosave si el proyecto es válido.
-     */
     private fun startAutoSaveIfPossible() {
         if (projectId != VideoEditorConfig.INVALID_PROJECT_ID) {
             autoSaveController.start(projectId)
         }
+    }
+
+    private fun setupBackNavigation() {
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (!canLeaveEditorScreen()) {
+                        actionTagController.showTemporaryAction("Esperá a que termine la exportación")
+                        return
+                    }
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        )
     }
 
     override fun onStop() {
@@ -1133,12 +1100,17 @@ class VideoEditorActivity : AppCompatActivity() {
             playerController.release()
         }
 
+        if (::timelineRenderer.isInitialized) {
+            timelineRenderer.release()
+        }
+
+        if (::thumbnailProvider.isInitialized) {
+            thumbnailProvider.clearCache()
+        }
+
         super.onDestroy()
     }
 
-    /**
-     * Guarda un reporte y muestra al usuario si se logró crear.
-     */
     private fun saveDebugReport(
         tag: String,
         message: String,
@@ -1168,9 +1140,6 @@ class VideoEditorActivity : AppCompatActivity() {
     }
 
     companion object {
-        /**
-         * Crea el intent para abrir el editor.
-         */
         fun createIntent(context: Context, projectId: Long): Intent {
             return Intent(context, VideoEditorActivity::class.java).apply {
                 putExtra(VideoEditorConfig.EXTRA_PROJECT_ID, projectId)

@@ -1,4 +1,4 @@
-package com.ulpro.ticovision_ai.ui.editor.timeline
+package com.ulpro.ticovisionai.ui.editor.timeline
 
 import android.content.ContentResolver
 import android.content.Context
@@ -8,30 +8,36 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.LruCache
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Proveedor de miniaturas para clips del timeline.
+ * Proveedor optimizado de miniaturas para timeline.
  *
- * Responsabilidades:
- * - Obtener duración real de videos.
- * - Extraer frames de video de forma segura.
- * - Cargar miniaturas de imagen reducidas para no saturar memoria.
- * - Mantener caché en memoria para evitar trabajo repetido.
+ * Objetivos de rendimiento:
+ * - Reducir consumo de memoria en dispositivos modestos.
+ * - Evitar trabajos duplicados cuando varias vistas piden la misma miniatura.
+ * - Generar thumbnails de baja resolución suficientes para timeline.
+ * - Mantener caché separada para imágenes y frames de video.
  */
 class TimelineThumbnailProvider(
     private val context: Context
 ) {
 
+    private val cacheLock = Mutex()
+    private val inFlightLock = Mutex()
+    private val inFlightRequests = HashSet<String>()
+
     private val thumbnailMemoryCache by lazy {
-        val maxMemoryKb = Runtime.getRuntime().maxMemory() / 1024L
-        val cacheMaxSizeKb = (maxMemoryKb / 16L)
-            .coerceAtMost(Int.MAX_VALUE.toLong())
+        val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024L).coerceAtLeast(8_192L)
+        val cacheMaxSizeKb = (maxMemoryKb / 24L)
+            .coerceIn(2_048L, 12_288L)
             .toInt()
 
         object : LruCache<String, Bitmap>(cacheMaxSizeKb) {
             override fun sizeOf(key: String, value: Bitmap): Int {
-                return value.byteCount / 1024
+                return (value.byteCount / 1024).coerceAtLeast(1)
             }
         }
     }
@@ -41,11 +47,11 @@ class TimelineThumbnailProvider(
      */
     suspend fun getVideoDuration(uri: Uri): Long = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
-
         return@withContext try {
             retriever.setDataSource(context, uri)
-            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            duration?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+            retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_DURATION
+            )?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
         } catch (_: Exception) {
             0L
         } finally {
@@ -54,22 +60,39 @@ class TimelineThumbnailProvider(
     }
 
     /**
-     * Devuelve una miniatura de video para el tiempo indicado.
+     * Miniatura representativa de video para usos rápidos.
+     */
+    suspend fun getRepresentativeVideoThumbnail(uri: Uri): Bitmap? {
+        return getVideoFrameAtTime(
+            uri = uri,
+            timeUs = 1_000_000L,
+            targetWidth = 96,
+            targetHeight = 96
+        )
+    }
+
+    /**
+     * Obtiene un frame de video optimizado para timeline.
      *
-     * El resultado se escala a un tamaño razonable para timeline
-     * y se guarda en caché para reutilización.
+     * La lógica reduce deliberadamente el tamaño objetivo porque en la tira
+     * del timeline no se necesita detalle fotográfico completo.
      */
     suspend fun getVideoFrameAtTime(
         uri: Uri,
         timeUs: Long,
-        targetWidth: Int = 160,
-        targetHeight: Int = 160
+        targetWidth: Int = 96,
+        targetHeight: Int = 96
     ): Bitmap? = withContext(Dispatchers.IO) {
         val safeTimeUs = timeUs.coerceAtLeast(0L)
-        val cacheKey = "video|$uri|$safeTimeUs|$targetWidth|$targetHeight"
+        val safeWidth = targetWidth.coerceIn(48, 160)
+        val safeHeight = targetHeight.coerceIn(48, 160)
+        val quantizedTimeUs = quantizeFrameTimeUs(safeTimeUs)
+        val cacheKey = "video|$uri|$quantizedTimeUs|$safeWidth|$safeHeight"
 
-        thumbnailMemoryCache.get(cacheKey)?.let { cached ->
-            return@withContext cached
+        getFromCache(cacheKey)?.let { return@withContext it }
+
+        if (!markRequestStarted(cacheKey)) {
+            return@withContext waitForBitmapFromCache(cacheKey)
         }
 
         val retriever = MediaMetadataRetriever()
@@ -78,56 +101,48 @@ class TimelineThumbnailProvider(
             retriever.setDataSource(context, uri)
 
             val rawBitmap = retriever.getFrameAtTime(
-                safeTimeUs,
+                quantizedTimeUs,
                 MediaMetadataRetriever.OPTION_CLOSEST_SYNC
             ) ?: return@withContext null
 
-            val scaledBitmap = scaleBitmapPreservingAspect(
-                bitmap = rawBitmap,
-                maxWidth = targetWidth,
-                maxHeight = targetHeight
+            val preparedBitmap = rawBitmap.toTimelineBitmap(
+                maxWidth = safeWidth,
+                maxHeight = safeHeight
             )
 
-            if (scaledBitmap != null) {
-                thumbnailMemoryCache.put(cacheKey, scaledBitmap)
+            if (preparedBitmap != null) {
+                putInCache(cacheKey, preparedBitmap)
             }
 
-            if (scaledBitmap !== rawBitmap) {
+            if (preparedBitmap !== rawBitmap) {
                 rawBitmap.recycleSafely()
             }
 
-            scaledBitmap
+            preparedBitmap
         } catch (_: Exception) {
             null
         } finally {
             runCatching { retriever.release() }
+            markRequestFinished(cacheKey)
         }
     }
 
     /**
-     * Devuelve una miniatura representativa del video.
-     */
-    suspend fun getRepresentativeVideoThumbnail(uri: Uri): Bitmap? {
-        return getVideoFrameAtTime(
-            uri = uri,
-            timeUs = 1_000_000L,
-            targetWidth = 160,
-            targetHeight = 160
-        )
-    }
-
-    /**
-     * Devuelve una miniatura reducida para una imagen.
+     * Obtiene una miniatura reducida de imagen para timeline.
      */
     suspend fun getImageThumbnail(
         uri: Uri,
-        targetWidth: Int = 160,
-        targetHeight: Int = 160
+        targetWidth: Int = 96,
+        targetHeight: Int = 96
     ): Bitmap? = withContext(Dispatchers.IO) {
-        val cacheKey = "image|$uri|$targetWidth|$targetHeight"
+        val safeWidth = targetWidth.coerceIn(48, 160)
+        val safeHeight = targetHeight.coerceIn(48, 160)
+        val cacheKey = "image|$uri|$safeWidth|$safeHeight"
 
-        thumbnailMemoryCache.get(cacheKey)?.let { cached ->
-            return@withContext cached
+        getFromCache(cacheKey)?.let { return@withContext it }
+
+        if (!markRequestStarted(cacheKey)) {
+            return@withContext waitForBitmapFromCache(cacheKey)
         }
 
         return@withContext try {
@@ -146,44 +161,60 @@ class TimelineThumbnailProvider(
             val sampleSize = calculateInSampleSize(
                 srcWidth = boundsOptions.outWidth,
                 srcHeight = boundsOptions.outHeight,
-                reqWidth = targetWidth,
-                reqHeight = targetHeight
+                reqWidth = safeWidth,
+                reqHeight = safeHeight
             )
 
             val decodeOptions = BitmapFactory.Options().apply {
                 inSampleSize = sampleSize
                 inPreferredConfig = Bitmap.Config.RGB_565
+                inDither = true
             }
 
             val decodedBitmap = context.contentResolver.openInputStream(uri)?.use { input ->
                 BitmapFactory.decodeStream(input, null, decodeOptions)
             } ?: return@withContext null
 
-            val scaledBitmap = scaleBitmapPreservingAspect(
-                bitmap = decodedBitmap,
-                maxWidth = targetWidth,
-                maxHeight = targetHeight
+            val preparedBitmap = decodedBitmap.toTimelineBitmap(
+                maxWidth = safeWidth,
+                maxHeight = safeHeight
             )
 
-            if (scaledBitmap != null) {
-                thumbnailMemoryCache.put(cacheKey, scaledBitmap)
+            if (preparedBitmap != null) {
+                putInCache(cacheKey, preparedBitmap)
             }
 
-            if (scaledBitmap !== decodedBitmap) {
+            if (preparedBitmap !== decodedBitmap) {
                 decodedBitmap.recycleSafely()
             }
 
-            scaledBitmap
+            preparedBitmap
         } catch (_: Exception) {
             null
+        } finally {
+            markRequestFinished(cacheKey)
         }
     }
 
     /**
-     * Limpia la caché de miniaturas.
+     * Limpia toda la caché.
      */
     fun clearCache() {
         thumbnailMemoryCache.evictAll()
+    }
+
+    /**
+     * Permite recortar memoria si la app entra en presión.
+     */
+    fun trimMemory(level: Int) {
+        when {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> {
+                thumbnailMemoryCache.evictAll()
+            }
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> {
+                thumbnailMemoryCache.trimToSize(thumbnailMemoryCache.maxSize() / 2)
+            }
+        }
     }
 
     /**
@@ -205,8 +236,88 @@ class TimelineThumbnailProvider(
         }
     }
 
+    private suspend fun getFromCache(key: String): Bitmap? {
+        return cacheLock.withLock {
+            thumbnailMemoryCache.get(key)
+        }
+    }
+
+    private suspend fun putInCache(key: String, bitmap: Bitmap) {
+        cacheLock.withLock {
+            thumbnailMemoryCache.put(key, bitmap)
+        }
+    }
+
+    private suspend fun markRequestStarted(key: String): Boolean {
+        return inFlightLock.withLock {
+            if (inFlightRequests.contains(key)) {
+                false
+            } else {
+                inFlightRequests.add(key)
+                true
+            }
+        }
+    }
+
+    private suspend fun markRequestFinished(key: String) {
+        inFlightLock.withLock {
+            inFlightRequests.remove(key)
+        }
+    }
+
     /**
-     * Reduce el tamaño del bitmap respetando aspecto.
+     * Espera breve para reutilizar el resultado de una solicitud ya activa.
+     *
+     * Evita que varias corrutinas extraigan el mismo frame a la vez.
+     */
+    private suspend fun waitForBitmapFromCache(key: String): Bitmap? {
+        repeat(8) {
+            getFromCache(key)?.let { return it }
+            withContext(Dispatchers.IO) {
+                Thread.sleep(18L)
+            }
+        }
+        return getFromCache(key)
+    }
+
+    /**
+     * Cuantiza el tiempo pedido para que frames muy cercanos reutilicen caché.
+     *
+     * Matemáticamente esto reduce cardinalidad de claves:
+     * en vez de una clave por cada microsegundo, se agrupan ventanas fijas.
+     */
+    private fun quantizeFrameTimeUs(timeUs: Long): Long {
+        val stepUs = 250_000L
+        return ((timeUs / stepUs) * stepUs).coerceAtLeast(0L)
+    }
+
+    /**
+     * Convierte un bitmap a formato liviano para timeline.
+     *
+     * Se usa RGB_565 porque consume aproximadamente la mitad de memoria
+     * respecto a ARGB_8888, suficiente para miniaturas pequeñas.
+     */
+    private fun Bitmap.toTimelineBitmap(
+        maxWidth: Int,
+        maxHeight: Int
+    ): Bitmap? {
+        val scaled = scaleBitmapPreservingAspect(
+            bitmap = this,
+            maxWidth = maxWidth,
+            maxHeight = maxHeight
+        ) ?: return null
+
+        if (scaled.config == Bitmap.Config.RGB_565) {
+            return scaled
+        }
+
+        return runCatching {
+            scaled.copy(Bitmap.Config.RGB_565, false)
+        }.getOrNull() ?: scaled
+    }
+
+    /**
+     * Reduce el bitmap respetando aspecto.
      */
     private fun scaleBitmapPreservingAspect(
         bitmap: Bitmap,
@@ -234,7 +345,7 @@ class TimelineThumbnailProvider(
     }
 
     /**
-     * Calcula sample size para decodificación eficiente.
+     * Calcula sample size eficiente para decodificación.
      */
     private fun calculateInSampleSize(
         srcWidth: Int,
@@ -256,9 +367,6 @@ class TimelineThumbnailProvider(
         return inSampleSize.coerceAtLeast(1)
     }
 
-    /**
-     * Libera bitmap si no está reciclado.
-     */
     private fun Bitmap.recycleSafely() {
         runCatching {
             if (!isRecycled) recycle()
