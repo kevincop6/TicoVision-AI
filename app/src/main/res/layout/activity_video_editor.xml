@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -22,8 +23,8 @@
 
         <ImageButton
             android:id="@+id/btnBack"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="@drawable/bg_circle_dark_button"
             android:contentDescription="@string/back"
             android:padding="10dp"
@@ -45,8 +46,8 @@
 
         <ImageButton
             android:id="@+id/btnMore"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:layout_marginEnd="10dp"
             android:background="@drawable/bg_circle_dark_button"
             android:contentDescription="@string/project_options"
@@ -57,7 +58,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnExport"
             android:layout_width="wrap_content"
-            android:layout_height="42dp"
+            android:layout_height="48dp"
             android:minWidth="0dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
@@ -108,7 +109,8 @@
             android:layout_gravity="start|bottom"
             android:layout_marginStart="12dp"
             android:layout_marginBottom="12dp"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/tvActionTagOne"
@@ -121,7 +123,8 @@
                 android:paddingBottom="8dp"
                 android:text="@string/action_shape_added"
                 android:textColor="@android:color/white"
-                android:textSize="13sp" />
+                android:textSize="13sp"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/tvActionTagTwo"
@@ -135,7 +138,8 @@
                 android:paddingBottom="8dp"
                 android:text="@string/action_blur_deleted"
                 android:textColor="@android:color/white"
-                android:textSize="13sp" />
+                android:textSize="13sp"
+                android:visibility="gone" />
         </LinearLayout>
     </FrameLayout>
 
@@ -165,8 +169,8 @@
 
             <ImageButton
                 android:id="@+id/btnMute"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:background="@android:color/transparent"
                 android:contentDescription="@string/mute"
                 android:padding="8dp"
@@ -195,8 +199,8 @@
 
             <ImageButton
                 android:id="@+id/btnUndo"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:background="@android:color/transparent"
                 android:contentDescription="@string/undo"
                 android:padding="8dp"
@@ -205,8 +209,8 @@
 
             <ImageButton
                 android:id="@+id/btnRedo"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:background="@android:color/transparent"
                 android:contentDescription="@string/redo"
                 android:padding="8dp"
@@ -245,271 +249,166 @@
         <FrameLayout
             android:id="@+id/timelineContainer"
             android:layout_width="match_parent"
-            android:layout_height="170dp"
-            android:layout_marginTop="2dp">
+            android:layout_height="188dp"
+            android:layout_marginTop="4dp"
+            android:background="#0E0E0E">
 
             <HorizontalScrollView
                 android:id="@+id/timelineScroll"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:fillViewport="false"
                 android:overScrollMode="never"
                 android:scrollbars="none">
 
                 <LinearLayout
                     android:id="@+id/timelineContent"
-                    android:layout_width="900dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="match_parent"
-                    android:orientation="vertical">
+                    android:minWidth="720dp"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="76dp"
+                    android:paddingBottom="6dp">
 
                     <LinearLayout
                         android:id="@+id/timelineRuler"
-                        android:layout_width="match_parent"
-                        android:layout_height="20dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="22dp"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
                         <TextView
-                            android:layout_width="120dp"
+                            android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:text="00:00:05"
-                            android:textColor="#9C9C9C"
-                            android:textSize="9sp" />
+                            android:text="00:00"
+                            android:textColor="#8E8E8E"
+                            android:textSize="10sp" />
 
                         <TextView
-                            android:layout_width="120dp"
+                            android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:text="00:00:10"
-                            android:textColor="#9C9C9C"
-                            android:textSize="9sp" />
+                            android:text="00:05"
+                            android:textColor="#8E8E8E"
+                            android:textSize="10sp" />
 
                         <TextView
-                            android:layout_width="120dp"
+                            android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:text="00:00:15"
-                            android:textColor="#9C9C9C"
-                            android:textSize="9sp" />
+                            android:text="00:10"
+                            android:textColor="#8E8E8E"
+                            android:textSize="10sp" />
 
                         <TextView
-                            android:layout_width="120dp"
+                            android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:text="00:00:20"
-                            android:textColor="#9C9C9C"
-                            android:textSize="9sp" />
+                            android:text="00:15"
+                            android:textColor="#8E8E8E"
+                            android:textSize="10sp" />
 
                         <TextView
-                            android:layout_width="120dp"
+                            android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:text="00:00:25"
-                            android:textColor="#9C9C9C"
-                            android:textSize="9sp" />
+                            android:text="00:20"
+                            android:textColor="#8E8E8E"
+                            android:textSize="10sp" />
 
                         <TextView
-                            android:layout_width="120dp"
+                            android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:text="00:00:30"
-                            android:textColor="#9C9C9C"
-                            android:textSize="9sp" />
+                            android:text="00:25"
+                            android:textColor="#8E8E8E"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:layout_width="100dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:text="00:30"
+                            android:textColor="#8E8E8E"
+                            android:textSize="10sp" />
                     </LinearLayout>
 
                     <FrameLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="82dp">
+                        android:id="@+id/timelineTrackFrame"
+                        android:layout_width="wrap_content"
+                        android:layout_height="92dp"
+                        android:layout_marginTop="6dp">
 
                         <LinearLayout
                             android:id="@+id/timelineVideoTrack"
                             android:layout_width="wrap_content"
                             android:layout_height="match_parent"
-                            android:orientation="horizontal">
-
-                            <FrameLayout
-                                android:layout_width="120dp"
-                                android:layout_height="82dp"
-                                android:background="#3B3B3B">
-
-                                <ImageView
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:scaleType="centerCrop"
-                                    android:src="@drawable/default_project_1" />
-
-                                <ImageView
-                                    android:layout_width="26dp"
-                                    android:layout_height="26dp"
-                                    android:layout_gravity="start|center_vertical"
-                                    android:layout_marginStart="8dp"
-                                    android:src="@drawable/ic_animate_tool"
-                                    app:tint="@android:color/white" />
-                            </FrameLayout>
-
-                            <ImageView
-                                android:layout_width="120dp"
-                                android:layout_height="82dp"
-                                android:scaleType="centerCrop"
-                                android:src="@drawable/default_project_1" />
-
-                            <ImageView
-                                android:layout_width="120dp"
-                                android:layout_height="82dp"
-                                android:scaleType="centerCrop"
-                                android:src="@drawable/default_project_1" />
-
-                            <ImageView
-                                android:layout_width="120dp"
-                                android:layout_height="82dp"
-                                android:scaleType="centerCrop"
-                                android:src="@drawable/default_project_1" />
-
-                            <ImageView
-                                android:layout_width="120dp"
-                                android:layout_height="82dp"
-                                android:scaleType="centerCrop"
-                                android:src="@drawable/default_project_1" />
-
-                            <FrameLayout
-                                android:layout_width="120dp"
-                                android:layout_height="82dp">
-
-                                <ImageView
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:scaleType="centerCrop"
-                                    android:src="@drawable/default_project_1" />
-
-                                <ImageView
-                                    android:layout_width="26dp"
-                                    android:layout_height="26dp"
-                                    android:layout_gravity="end|top"
-                                    android:layout_marginTop="8dp"
-                                    android:layout_marginEnd="8dp"
-                                    android:src="@drawable/ic_effects_tool"
-                                    app:tint="@android:color/white" />
-                            </FrameLayout>
-                        </LinearLayout>
-
-                        <View
-                            android:id="@+id/playhead"
-                            android:layout_width="3dp"
-                            android:layout_height="match_parent"
-                            android:layout_gravity="center_horizontal"
-                            android:background="@android:color/white" />
+                            android:orientation="horizontal" />
                     </FrameLayout>
 
                     <LinearLayout
-                        android:id="@+id/audioWaveTrack"
-                        android:layout_width="match_parent"
-                        android:layout_height="30dp"
-                        android:background="#2A2A2A"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingStart="4dp"
-                        android:paddingEnd="4dp">
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="10dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="16dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="8dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="18dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="12dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="20dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="9dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="15dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="7dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="17dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="11dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-
-                        <View
-                            android:layout_width="3dp"
-                            android:layout_height="19dp"
-                            android:layout_marginStart="3dp"
-                            android:background="#9E9E9E" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/tvAudioTrack"
+                        android:id="@+id/externalAudioTrackContainer"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:background="#1E1E1E"
-                        android:paddingStart="10dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="10dp"
-                        android:paddingBottom="8dp"
-                        android:text="@string/audio_track_sample"
-                        android:textColor="@android:color/white"
-                        android:textSize="12sp" />
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:id="@+id/audioWaveTrack"
+                            android:layout_width="wrap_content"
+                            android:layout_height="30dp"
+                            android:background="#202020"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="6dp"
+                            android:paddingEnd="6dp" />
+
+                        <TextView
+                            android:id="@+id/tvAudioTrack"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:background="#171717"
+                            android:paddingStart="10dp"
+                            android:paddingTop="6dp"
+                            android:paddingEnd="10dp"
+                            android:paddingBottom="6dp"
+                            android:text=""
+                            android:textColor="@android:color/white"
+                            android:textSize="12sp" />
+                    </LinearLayout>
                 </LinearLayout>
             </HorizontalScrollView>
 
+            <View
+                android:id="@+id/playhead"
+                android:layout_width="2dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="top|start"
+                android:background="@android:color/white" />
+
+            <View
+                android:id="@+id/playheadHandle"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="top|start"
+                android:layout_marginTop="2dp"
+                android:background="@drawable/bg_circle_add_track" />
+
             <ImageButton
                 android:id="@+id/btnAddTrack"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="54dp"
+                android:layout_height="54dp"
                 android:layout_gravity="end|center_vertical"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="6dp"
                 android:background="@drawable/bg_circle_add_track"
                 android:contentDescription="@string/add"
                 android:padding="14dp"
                 android:src="@drawable/ic_add"
                 app:tint="@color/text_primary" />
-
         </FrameLayout>
     </LinearLayout>
 

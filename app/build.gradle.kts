@@ -20,7 +20,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -63,4 +62,7 @@ dependencies {
 
     implementation("androidx.media3:media3-exoplayer:1.10.0")
     implementation("androidx.media3:media3-ui:1.10.0")
+    implementation("androidx.media3:media3-common:1.10.0")
+    implementation("androidx.media3:media3-transformer:1.10.0")
+    implementation("androidx.media3:media3-effect:1.10.0")
 }

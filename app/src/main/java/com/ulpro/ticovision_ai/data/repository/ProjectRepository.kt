@@ -176,6 +176,53 @@ class ProjectRepository(
     }
 
     /**
+     * Agrega una imagen al timeline del proyecto como clip real.
+     * Se inserta al final de la pista 0 con duración fija o la indicada.
+     */
+    suspend fun addImageToTimeline(
+        projectId: Long,
+        sourceUri: String,
+        durationMs: Long,
+        thumbnailUri: String? = null
+    ): Long {
+        val currentItems = timelineItemDao.getItemsByProjectId(projectId)
+
+        val lastEndTime = currentItems
+            .filter { it.trackIndex == 0 }
+            .maxOfOrNull { it.startTimeMs + it.durationMs }
+            ?: 0L
+
+        val timelineItem = TimelineItemEntity(
+            projectOwnerId = projectId,
+            type = "image",
+            trackIndex = 0,
+            startTimeMs = lastEndTime,
+            durationMs = durationMs,
+            sourceUri = sourceUri,
+            thumbnailUri = thumbnailUri
+        )
+
+        val insertedId = timelineItemDao.insertItem(timelineItem)
+
+        val currentProject = projectDao.getProjectById(projectId)
+        if (currentProject != null) {
+            val updatedDuration = maxOf(
+                currentProject.durationMs,
+                lastEndTime + durationMs
+            )
+
+            projectDao.upsertProject(
+                currentProject.copy(
+                    durationMs = updatedDuration,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+
+        return insertedId
+    }
+
+    /**
      * Inserta un item cualquiera en el timeline.
      * Esto te servirá después para texto, audio, overlays o efectos.
      */
