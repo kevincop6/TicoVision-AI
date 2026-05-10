@@ -75,7 +75,15 @@ class EditorPlayerController(
             }
         })
     }
-
+    /**
+     * Retorna la posición actual en milisegundos relativa al inicio de TODO el timeline.
+     * Útil para sincronizar el playhead del timeline.
+     */
+    fun getCurrentPositionMs(): Long = getGlobalPlaybackPosition()
+    /**
+     * Retorna la duración total de todos los clips en el timeline.
+     */
+    fun getDurationMs(): Long = getCurrentPlayableDurationMs()
     fun isMuted(): Boolean = isVideoMuted
 
     fun mediaItemCount(): Int = player.mediaItemCount
@@ -278,19 +286,25 @@ class EditorPlayerController(
         return currentPlayableEntries.sumOf { it.sourceItem.durationMs.coerceAtLeast(0L) }
     }
 
+    /**
+     * Loop de actualización de UI.
+     * Se cambió el delay a 16ms para tener 60fps de fluidez en el movimiento del timeline.
+     */
     private fun startPlaybackUiSync(onUiSyncRequested: () -> Unit) {
         playbackUiJob?.cancel()
-
         playbackUiJob = lifecycleScope.launch {
             while (isActive) {
                 try {
                     if (player.mediaItemCount > 0 && player.isPlaying) {
+                        // Crucial: Disparamos el evento de posición en cada frame (16ms)
+                        onPositionRelevantEvent()
                         onUiSyncRequested()
                     }
                 } catch (e: Exception) {
                     mainHandler.post { onPlayerError(e) }
                 }
-                delay(120L)
+                // 16ms = 60fps de fluidez visual
+                delay(16L)
             }
         }
     }

@@ -6,7 +6,8 @@ import android.widget.HorizontalScrollView
 /**
  * Helper de cálculos para arrastre y posicionamiento del playhead.
  */
-object TimelineSeekHelper {
+object
+TimelineSeekHelper {
 
     /**
      * Convierte la posición táctil global en coordenada local dentro del contenido del timeline.
@@ -65,7 +66,8 @@ object TimelineSeekHelper {
     }
 
     /**
-     * Actualiza visualmente la guía/playhead sin forzar scroll del timeline.
+     * Actualiza visualmente la guía/playhead y SINCRONIZA el scroll
+     * para que el contenido se mueva según el tiempo actual.
      */
     fun updatePlayhead(
         timelineContainer: View,
@@ -80,24 +82,37 @@ object TimelineSeekHelper {
     ) {
         if (totalMs <= 0L) return
 
+        // Determinamos el ancho real del contenido
         val trackWidth = timelineContent.width.coerceAtLeast(timelineVideoTrack.width)
         if (trackWidth <= 0) return
 
         val viewportWidth = timelineScroll.width
         if (viewportWidth <= 0) return
 
+        // Tu lógica de guía fija: la línea se queda en el px 48 y el fondo se mueve
         val fixedGuideX = 48f.coerceAtMost(viewportWidth.toFloat())
 
+        // Sincronización visual de los indicadores
         playhead.translationX = fixedGuideX - (playhead.width / 2f)
         playheadHandle.translationX = fixedGuideX - (playheadHandle.width / 2f)
 
-        if (playhead.visibility != View.VISIBLE) {
-            playhead.visibility = View.VISIBLE
+        // Sincronización de scroll (el video se mueve bajo la guía)
+        if (!isDraggingPlayhead) {
+            val progress = currentMs.toFloat() / totalMs.toFloat()
+            val globalPixelX = progress * trackWidth
+
+            // Calculamos cuánto scroll ocupar para que el progreso coincida con la guía fija
+            val targetScrollX = (globalPixelX - fixedGuideX).toInt()
+
+            timelineScroll.scrollTo(
+                targetScrollX.coerceIn(0, (trackWidth - viewportWidth).coerceAtLeast(0)),
+                0
+            )
         }
 
-        if (playheadHandle.visibility != View.VISIBLE) {
-            playheadHandle.visibility = View.VISIBLE
-        }
+        // Aseguramos visibilidad
+        if (playhead.visibility != View.VISIBLE) playhead.visibility = View.VISIBLE
+        if (playheadHandle.visibility != View.VISIBLE) playheadHandle.visibility = View.VISIBLE
 
         playhead.bringToFront()
         playheadHandle.bringToFront()

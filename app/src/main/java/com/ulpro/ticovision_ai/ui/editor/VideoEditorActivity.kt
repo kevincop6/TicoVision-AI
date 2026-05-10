@@ -169,11 +169,24 @@ class VideoEditorActivity : AppCompatActivity() {
                 )
             },
             onPositionRelevantEvent = {
-                if (!isTimelineScrollSeeking && !isUserScrollingTimeline && !isDraggingPlayhead) {
-                    syncPreviewWithCurrentItem()
-                    updateTimeTextsFromPlayer()
-                    updatePlayheadFromPlayer()
-                }
+                val currentPos = playerController.getCurrentPositionMs()
+                val totalDur = playerController.getDurationMs()
+
+                // Ajuste Quirúrgico: IDs exactos según tu XML
+                TimelineSeekHelper.updatePlayhead(
+                    timelineContainer = binding.timelineContainer,
+                    timelineScroll = binding.timelineScroll,    // ID corregido (era timelineScrollView)
+                    timelineContent = binding.timelineContent,
+                    timelineVideoTrack = binding.timelineVideoTrack,
+                    playhead = binding.playhead,               // ID corregido (era playheadView)
+                    playheadHandle = binding.playheadHandle,
+                    currentMs = currentPos,
+                    totalMs = totalDur,
+                    isDraggingPlayhead = false
+                )
+
+                // Actualizamos el texto del tiempo actual
+                binding.tvTimeCurrent.text = com.ulpro.ticovision_ai.ui.editor.util.formatDuration(currentPos)
             },
             onPlayerError = { throwable ->
                 saveDebugReport(

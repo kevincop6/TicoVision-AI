@@ -255,17 +255,19 @@
 
             <HorizontalScrollView
                 android:id="@+id/timelineScroll"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:fillViewport="false"
+                android:minWidth="0dp"
                 android:overScrollMode="never"
-                android:scrollbars="none">
+                android:scrollbars="none"
+                android:contentDescription="@string/timeline_scroll_desc">
 
                 <LinearLayout
                     android:id="@+id/timelineContent"
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
-                    android:minWidth="720dp"
+                    android:minWidth="0dp"
                     android:orientation="vertical"
                     android:paddingTop="4dp"
                     android:paddingEnd="76dp"
@@ -275,70 +277,16 @@
                         android:id="@+id/timelineRuler"
                         android:layout_width="wrap_content"
                         android:layout_height="22dp"
+                        android:minWidth="0dp"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="100dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:text="00:00"
-                            android:textColor="#8E8E8E"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:layout_width="100dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:text="00:05"
-                            android:textColor="#8E8E8E"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:layout_width="100dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:text="00:10"
-                            android:textColor="#8E8E8E"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:layout_width="100dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:text="00:15"
-                            android:textColor="#8E8E8E"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:layout_width="100dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:text="00:20"
-                            android:textColor="#8E8E8E"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:layout_width="100dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:text="00:25"
-                            android:textColor="#8E8E8E"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:layout_width="100dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:text="00:30"
-                            android:textColor="#8E8E8E"
-                            android:textSize="10sp" />
                     </LinearLayout>
 
                     <FrameLayout
                         android:id="@+id/timelineTrackFrame"
                         android:layout_width="wrap_content"
                         android:layout_height="92dp"
+                        android:minWidth="0dp"
                         android:layout_marginTop="6dp">
 
                         <LinearLayout
@@ -353,6 +301,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
+                        android:minWidth="0dp"
                         android:orientation="vertical"
                         android:visibility="gone">
 

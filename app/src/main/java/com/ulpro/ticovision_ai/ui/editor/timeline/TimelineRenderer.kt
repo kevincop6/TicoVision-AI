@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleCoroutineScope
 import com.ulpro.ticovision_ai.R
@@ -55,8 +56,10 @@ class TimelineRenderer(
         val selectedKey = currentTimelineItem?.timelineKey()
         val structuralSignature = buildStructuralSignature(visualTimelineItems)
 
+        // 1. Limpieza si no hay items
         if (visualTimelineItems.isEmpty()) {
             clearVisualTrack()
+            binding.timelineRuler.removeAllViews() // Limpiar regla
             updateTimelineContentWidth(0)
             renderExternalAudioTrackIfNeeded(items)
             lastRenderedSignature = ""
@@ -65,22 +68,69 @@ class TimelineRenderer(
             return
         }
 
+        // 2. Reconstrucción o actualización de clips
         if (structuralSignature != lastRenderedSignature) {
             rebuildVisualTrack(visualTimelineItems, currentTimelineItem, currentPlaylistIndex)
+            renderTimeRuler(visualTimelineItems) // ACCIÓN: Renderizar la regla dinámica
             lastRenderedSignature = structuralSignature
         } else {
             updateSelectionOnly(visualTimelineItems, currentTimelineItem, currentPlaylistIndex)
         }
 
+        // 3. Ajuste de anchos y audio
         binding.timelineVideoTrack.post {
-            updateTimelineContentWidth(binding.timelineVideoTrack.width)
+            val actualTrackWidth = binding.timelineVideoTrack.width
+            updateTimelineContentWidth(actualTrackWidth)
         }
 
         renderExternalAudioTrackIfNeeded(items)
         lastSelectedKey = selectedKey
         lastSelectedIndex = currentPlaylistIndex
     }
+    /**
+     * Genera las marcas de tiempo (00:00, 00:05...) dinámicamente.
+     */
+    private fun renderTimeRuler(items: List<TimelineItemEntity>) {
+        val rulerContainer = binding.timelineRuler
+        rulerContainer.removeAllViews()
 
+        val totalDurationMs = items.sumOf { it.durationMs }
+        if (totalDurationMs <= 0L) return
+
+        val pxPerSecond = VideoEditorConfig.TIMELINE_PX_PER_SECOND_DP.dp(context)
+        val intervalSec = 5
+        val pxPerInterval = pxPerSecond * intervalSec
+
+        // CIRUGÍA: Calculamos cuántas marcas de 5s caben, redondeando HACIA ARRIBA
+        // para asegurar que cubra el final del último clip.
+        val totalSeconds = totalDurationMs / 1000f
+        val numberOfMarks = kotlin.math.ceil(totalSeconds / intervalSec).toInt()
+
+        for (i in 0..numberOfMarks) {
+            val timeMs = (i * intervalSec * 1000).toLong()
+
+            // Si es la última marca, solo la dibujamos si no se pasa excesivamente del final,
+            // o simplemente dejamos que el contenedor la recorte.
+            val tvMark = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    pxPerInterval,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                text = com.ulpro.ticovision_ai.ui.editor.util.formatDuration(timeMs)
+                setTextColor(0xFF8E8E8E.toInt())
+                textSize = 10f
+                gravity = android.view.Gravity.START
+                setPadding(4.dp(context), 0, 0, 0)
+            }
+            rulerContainer.addView(tvMark)
+        }
+
+        // Sincronizamos el ancho de la regla con el ancho total calculado de los clips
+        val totalWidthPx = items.sumOf { calculateTimelineItemWidthPx(it) }
+        rulerContainer.layoutParams = rulerContainer.layoutParams.apply {
+            width = totalWidthPx
+        }
+    }
     /**
      * Actualiza solo selección sin reconstruir toda la pista.
      */
@@ -428,16 +478,24 @@ class TimelineRenderer(
         return rawCount.coerceIn(1, 6)
     }
 
+
+    /**
+     * Sincroniza el ancho de todos los componentes del timeline.
+     */
     private fun updateTimelineContentWidth(trackWidthPx: Int) {
+        // Obtenemos el ancho mínimo de la configuración
         val minWidthPx = VideoEditorConfig.TIMELINE_MIN_CONTENT_WIDTH_DP.dp(context)
+        // El ancho final debe ser el mayor entre el track de video, la regla o el mínimo
         val finalWidth = maxOf(trackWidthPx, minWidthPx)
 
+        // Ajustamos el contenedor principal
         binding.timelineContent.layoutParams = binding.timelineContent.layoutParams.apply {
             width = finalWidth
         }
 
+        // AJUSTE QUIRÚRGICO: Forzamos a la regla a tener el mismo ancho exacto que el track de video
         binding.timelineRuler.layoutParams = binding.timelineRuler.layoutParams.apply {
-            width = finalWidth
+            width = trackWidthPx
         }
 
         binding.audioWaveTrack.layoutParams = binding.audioWaveTrack.layoutParams.apply {
