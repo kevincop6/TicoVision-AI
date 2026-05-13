@@ -1,8 +1,10 @@
 package com.ulpro.ticovision_ai.ui.editor
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.net.Uri.parse
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
@@ -186,7 +188,7 @@ class VideoEditorActivity : AppCompatActivity() {
                 )
 
                 // Actualizamos el texto del tiempo actual
-                binding.tvTimeCurrent.text = com.ulpro.ticovision_ai.ui.editor.util.formatDuration(currentPos)
+                binding.tvTimeCurrent.text = formatDuration(currentPos)
             },
             onPlayerError = { throwable ->
                 saveDebugReport(
@@ -457,8 +459,15 @@ class VideoEditorActivity : AppCompatActivity() {
             .show()
     }
 
+    @SuppressLint("ClickableViewAccessibility") // Esta es la "llave" para silenciar al IDE de forma profesional
     private fun setupTimelineInteractions() {
-        binding.timelineScroll.setOnTouchListener { _, event ->
+
+        // 1. Listener para el Scroll del Timeline (HorizontalScrollView)
+        binding.timelineScroll.setOnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                v.performClick()
+            }
+
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     isDraggingPlayhead = false
@@ -468,8 +477,7 @@ class VideoEditorActivity : AppCompatActivity() {
                 MotionEvent.ACTION_MOVE -> {
                     updateTimelineUiFromScrollPreview()
                 }
-                MotionEvent.ACTION_UP,
-                MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     updateTimelineUiFromScrollPreview()
                     commitTimelineScrollSeek()
                     isUserScrollingTimeline = false
@@ -477,16 +485,24 @@ class VideoEditorActivity : AppCompatActivity() {
                     lastTimelineScrollX = -1
                 }
             }
+            // Retornamos FALSE para que el scroll nativo de Android siga funcionando
             false
         }
 
-        val dragListener = View.OnTouchListener { _, event ->
+        // 2. Listener para arrastrar el Playhead (Línea guía y mango)
+        val dragListener = View.OnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                v.performClick()
+            }
+
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     isDraggingPlayhead = true
                     isUserScrollingTimeline = false
                     playerController.pause()
                     updatePlayPauseIcon(false)
+
+                    // IMPORTANTE: Bloqueamos al padre para que el scroll no "brinque" al mover la guía
                     binding.timelineScroll.parent?.requestDisallowInterceptTouchEvent(true)
 
                     val contentX = TimelineSeekHelper.getTimelineTouchXInsideContent(
@@ -508,8 +524,7 @@ class VideoEditorActivity : AppCompatActivity() {
                     movePlayheadFromTouch(contentX, false)
                     true
                 }
-                MotionEvent.ACTION_UP,
-                MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     val contentX = TimelineSeekHelper.getTimelineTouchXInsideContent(
                         timelineContent = binding.timelineContent,
                         timelineScrollX = binding.timelineScroll.scrollX,
@@ -746,7 +761,7 @@ class VideoEditorActivity : AppCompatActivity() {
         lastSyncedPreviewItemKey = itemKey
 
         if (item.type == "image") {
-            val imageUri = item.sourceUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            val imageUri = item.sourceUri?.let { runCatching { parse(it) }.getOrNull() }
             if (imageUri != null) {
                 binding.ivPreviewPlaceholder.setImageURI(imageUri)
             } else {

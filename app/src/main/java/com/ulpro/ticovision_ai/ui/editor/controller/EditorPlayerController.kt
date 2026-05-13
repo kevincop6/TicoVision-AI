@@ -381,4 +381,15 @@ class EditorPlayerController(
         val sourceKey: String,
         val mediaItem: MediaItem
     )
+    /**
+     * Calcula el progreso relativo al total del proyecto.
+     * @param totalProjectDurationMs La suma de todos los clips (ej: 01:40 = 100000ms)
+     */
+    fun getGlobalProgress(totalProjectDurationMs: Long): Float {
+        if (totalProjectDurationMs <= 0L) return 0f
+        val currentPos = getCurrentPositionMs()
+        // El coerceIn es vital para que no se pase del final si hay un micro-error de cálculo
+        return (currentPos.toFloat() / totalProjectDurationMs.toFloat()).coerceIn(0f, 1f)
+    }
+
 }
