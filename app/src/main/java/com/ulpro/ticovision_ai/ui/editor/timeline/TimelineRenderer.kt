@@ -101,16 +101,11 @@ class TimelineRenderer(
         val intervalSec = 5
         val pxPerInterval = pxPerSecond * intervalSec
 
-        // CIRUGÍA: Calculamos cuántas marcas de 5s caben, redondeando HACIA ARRIBA
-        // para asegurar que cubra el final del último clip.
         val totalSeconds = totalDurationMs / 1000f
         val numberOfMarks = kotlin.math.ceil(totalSeconds / intervalSec).toInt()
 
         for (i in 0..numberOfMarks) {
             val timeMs = (i * intervalSec * 1000).toLong()
-
-            // Si es la última marca, solo la dibujamos si no se pasa excesivamente del final,
-            // o simplemente dejamos que el contenedor la recorte.
             val tvMark = TextView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     pxPerInterval,
@@ -120,12 +115,13 @@ class TimelineRenderer(
                 setTextColor(0xFF8E8E8E.toInt())
                 textSize = 10f
                 gravity = android.view.Gravity.START
-                setPadding(4.dp(context), 0, 0, 0)
+                // Quitamos paddings extras para que el texto empiece en el píxel exacto
+                setPadding(0, 0, 0, 0)
             }
             rulerContainer.addView(tvMark)
         }
 
-        // Sincronizamos el ancho de la regla con el ancho total calculado de los clips
+        // EL ANCHO DEBE SER EXACTO A LOS CLIPS
         val totalWidthPx = items.sumOf { calculateTimelineItemWidthPx(it) }
         rulerContainer.layoutParams = rulerContainer.layoutParams.apply {
             width = totalWidthPx
@@ -482,29 +478,22 @@ class TimelineRenderer(
     /**
      * Sincroniza el ancho de todos los componentes del timeline.
      */
-    private fun updateTimelineContentWidth(trackWidthPx: Int) {
-        // Obtenemos el ancho mínimo de la configuración
-        val minWidthPx = VideoEditorConfig.TIMELINE_MIN_CONTENT_WIDTH_DP.dp(context)
-        // El ancho final debe ser el mayor entre el track de video, la regla o el mínimo
-        val finalWidth = maxOf(trackWidthPx, minWidthPx)
+    private fun updateTimelineContentWidth(actualTrackWidth: Int) {
+        // Obtenemos el ancho de la pantalla (viewport)
+        val scrollWidth = binding.timelineScroll.width
 
-        // Ajustamos el contenedor principal
-        binding.timelineContent.layoutParams = binding.timelineContent.layoutParams.apply {
-            width = finalWidth
+        // Según tu TimelineSeekHelper, la guía está en 48dp.
+        // Debemos convertir eso a píxeles para que el paddingStart sea exacto.
+        val guideOffsetPx = 20.dp(context)
+
+        binding.timelineContent.post {
+            binding.timelineContent.setPadding(
+                guideOffsetPx,               // paddingStart: Alinea el segundo 0 con la guía
+                binding.timelineContent.paddingTop,
+                scrollWidth - guideOffsetPx, // paddingEnd: Permite que el final llegue a la guía
+                binding.timelineContent.paddingBottom
+            )
         }
-
-        // AJUSTE QUIRÚRGICO: Forzamos a la regla a tener el mismo ancho exacto que el track de video
-        binding.timelineRuler.layoutParams = binding.timelineRuler.layoutParams.apply {
-            width = trackWidthPx
-        }
-
-        binding.audioWaveTrack.layoutParams = binding.audioWaveTrack.layoutParams.apply {
-            width = finalWidth
-        }
-
-        binding.timelineContent.requestLayout()
-        binding.timelineRuler.requestLayout()
-        binding.audioWaveTrack.requestLayout()
     }
 
     private fun renderExternalAudioTrackIfNeeded(items: List<TimelineItemEntity>) {
