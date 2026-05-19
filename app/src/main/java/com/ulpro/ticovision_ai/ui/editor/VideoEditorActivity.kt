@@ -27,6 +27,7 @@ import com.ulpro.ticovision_ai.ui.editor.controller.EditorPlayerController
 import com.ulpro.ticovision_ai.ui.editor.logging.EditorErrorReportManager
 import com.ulpro.ticovision_ai.ui.editor.timeline.TimelineRenderer
 import com.ulpro.ticovision_ai.ui.editor.timeline.TimelineSeekHelper
+import com.ulpro.ticovision_ai.ui.editor.util.dp
 import com.ulpro.ticovision_ai.ui.editor.util.formatDuration
 import com.ulpro.ticovision_ai.ui.editor.util.takeReadUriPermissionSafely
 import com.ulpro.ticovision_ai.ui.editor.util.timelineKey
@@ -184,7 +185,8 @@ class VideoEditorActivity : AppCompatActivity() {
                     playheadHandle = binding.playheadHandle,
                     currentMs = currentPos,
                     totalMs = totalDur,
-                    isDraggingPlayhead = false
+                    isDraggingPlayhead = false,
+                    fixedGuideX = getTimelineGuideOffsetPx()
                 )
 
                 // Actualizamos el texto del tiempo actual
@@ -789,10 +791,9 @@ class VideoEditorActivity : AppCompatActivity() {
     private fun updateTimelineUiFromScrollPreview() {
         if (visualTimelineItems.isEmpty()) return
 
-        val contentWidth = binding.timelineContent.width
-            .coerceAtLeast(binding.timelineVideoTrack.width)
+        val trackWidth = binding.timelineVideoTrack.width
 
-        if (contentWidth <= 0) return
+        if (trackWidth <= 0) return
 
         val currentScrollX = binding.timelineScroll.scrollX
         if (currentScrollX == lastTimelineScrollX) return
@@ -802,9 +803,10 @@ class VideoEditorActivity : AppCompatActivity() {
         val globalPositionMs = TimelineSeekHelper.calculateGlobalPositionFromScroll(
             timelineScrollX = currentScrollX,
             viewportWidth = binding.timelineScroll.width,
-            contentWidth = contentWidth,
+            trackWidth = trackWidth,
             totalDurationMs = totalDuration,
-            fixedGuideX = 48f
+            fixedGuideX = getTimelineGuideOffsetPx(),
+            contentStartOffsetPx = binding.timelineContent.paddingStart
         )
 
         pendingScrollSeekPositionMs = globalPositionMs
@@ -843,17 +845,16 @@ class VideoEditorActivity : AppCompatActivity() {
 
     private fun movePlayheadFromTouch(rawLocalX: Float, seekPlayer: Boolean) {
         val totalDuration = totalTimelineDurationMs.coerceAtLeast(1L)
-        val contentWidth = binding.timelineContent.width.coerceAtLeast(
-            binding.timelineVideoTrack.width
-        )
+        val trackWidth = binding.timelineVideoTrack.width
 
-        if (contentWidth <= 0) return
+        if (trackWidth <= 0) return
         if (visualTimelineItems.isEmpty()) return
 
         val globalPositionMs = TimelineSeekHelper.calculateGlobalPositionFromTouch(
             rawLocalX = rawLocalX,
-            contentWidth = contentWidth,
-            totalDurationMs = totalDuration
+            trackWidth = trackWidth,
+            totalDurationMs = totalDuration,
+            contentStartOffsetPx = binding.timelineContent.paddingStart
         )
 
         updatePlayhead(globalPositionMs, totalDuration)
@@ -888,8 +889,13 @@ class VideoEditorActivity : AppCompatActivity() {
             playheadHandle = binding.playheadHandle,
             currentMs = currentMs,
             totalMs = totalMs,
-            isDraggingPlayhead = isDraggingPlayhead
+            isDraggingPlayhead = isDraggingPlayhead,
+            fixedGuideX = getTimelineGuideOffsetPx()
         )
+    }
+
+    private fun getTimelineGuideOffsetPx(): Float {
+        return VideoEditorConfig.TIMELINE_GUIDE_OFFSET_DP.dp(this).toFloat()
     }
 
     private fun updatePlayheadFromPlayer() {

@@ -10,6 +10,7 @@ object VideoEditorConfig {
     const val ACTION_TAGS_VISIBLE_MS = 2_500L
     const val DEFAULT_IMAGE_DURATION_MS = 5_000L
     const val TIMELINE_MIN_CONTENT_WIDTH_DP = 900
+    const val TIMELINE_GUIDE_OFFSET_DP = 48
     const val TIMELINE_MIN_ITEM_WIDTH_DP = 96
     const val TIMELINE_PX_PER_SECOND_DP = 36
     const val TIMELINE_IMAGE_FRAME_WIDTH_DP = 48

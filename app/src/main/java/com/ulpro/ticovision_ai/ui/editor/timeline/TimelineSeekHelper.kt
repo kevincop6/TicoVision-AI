@@ -4,13 +4,12 @@ import android.view.View
 import android.widget.HorizontalScrollView
 
 /**
- * Helper de cálculos para arrastre y posicionamiento del playhead.
+ * Helper de calculos para arrastre y posicionamiento del playhead.
  */
-object
-TimelineSeekHelper {
+object TimelineSeekHelper {
 
     /**
-     * Convierte la posición táctil global en coordenada local dentro del contenido del timeline.
+     * Convierte la posicion tactil global en coordenada local dentro del contenido del timeline.
      */
     fun getTimelineTouchXInsideContent(
         timelineContent: View,
@@ -24,17 +23,19 @@ TimelineSeekHelper {
     }
 
     /**
-     * Calcula la posición global en milisegundos dentro del timeline a partir del toque.
+     * Calcula la posicion global en milisegundos dentro del timeline a partir del toque.
      */
     fun calculateGlobalPositionFromTouch(
         rawLocalX: Float,
-        contentWidth: Int,
-        totalDurationMs: Long
+        trackWidth: Int,
+        totalDurationMs: Long,
+        contentStartOffsetPx: Int = 0
     ): Long {
-        if (contentWidth <= 0 || totalDurationMs <= 0L) return 0L
+        if (trackWidth <= 0 || totalDurationMs <= 0L) return 0L
 
-        val clampedX = rawLocalX.coerceIn(0f, contentWidth.toFloat())
-        val progress = clampedX / contentWidth.toFloat()
+        val xInsideTrack = (rawLocalX - contentStartOffsetPx)
+            .coerceIn(0f, trackWidth.toFloat())
+        val progress = xInsideTrack / trackWidth.toFloat()
 
         return (progress * totalDurationMs)
             .toLong()
@@ -42,23 +43,23 @@ TimelineSeekHelper {
     }
 
     /**
-     * Calcula la posición global a partir del scroll del timeline y una guía fija.
+     * Calcula la posicion global a partir del scroll del timeline y una guia fija.
      */
     fun calculateGlobalPositionFromScroll(
         timelineScrollX: Int,
         viewportWidth: Int,
-        contentWidth: Int,
+        trackWidth: Int,
         totalDurationMs: Long,
-        fixedGuideX: Float
+        fixedGuideX: Float,
+        contentStartOffsetPx: Int = 0
     ): Long {
-        if (contentWidth <= 0 || totalDurationMs <= 0L) return 0L
+        if (trackWidth <= 0 || totalDurationMs <= 0L) return 0L
         if (viewportWidth <= 0) return 0L
 
         val safeGuideX = fixedGuideX.coerceIn(0f, viewportWidth.toFloat())
-        val xInContent = (timelineScrollX + safeGuideX)
-            .coerceIn(0f, contentWidth.toFloat())
-
-        val progress = xInContent / contentWidth.toFloat()
+        val xInsideTrack = (timelineScrollX + safeGuideX - contentStartOffsetPx)
+            .coerceIn(0f, trackWidth.toFloat())
+        val progress = xInsideTrack / trackWidth.toFloat()
 
         return (progress * totalDurationMs)
             .toLong()
@@ -66,8 +67,7 @@ TimelineSeekHelper {
     }
 
     /**
-     * Actualiza visualmente la guía/playhead y SINCRONIZA el scroll
-     * para que el contenido se mueva según el tiempo actual.
+     * Actualiza visualmente la guia/playhead y sincroniza el scroll con el tiempo actual.
      */
     fun updatePlayhead(
         timelineContainer: View,
@@ -78,39 +78,31 @@ TimelineSeekHelper {
         playheadHandle: View,
         currentMs: Long,
         totalMs: Long,
-        isDraggingPlayhead: Boolean
+        isDraggingPlayhead: Boolean,
+        fixedGuideX: Float
     ) {
         if (totalMs <= 0L) return
 
-        // Determinamos el ancho real del contenido
-        val trackWidth = timelineContent.width.coerceAtLeast(timelineVideoTrack.width)
+        val trackWidth = timelineVideoTrack.width
         if (trackWidth <= 0) return
 
         val viewportWidth = timelineScroll.width
         if (viewportWidth <= 0) return
 
-        // Tu lógica de guía fija: la línea se queda en el px 48 y el fondo se mueve
-        val fixedGuideX = 48f.coerceAtMost(viewportWidth.toFloat())
+        val safeGuideX = fixedGuideX.coerceIn(0f, viewportWidth.toFloat())
 
-        // Sincronización visual de los indicadores
-        playhead.translationX = fixedGuideX - (playhead.width / 2f)
-        playheadHandle.translationX = fixedGuideX - (playheadHandle.width / 2f)
+        playhead.translationX = safeGuideX - (playhead.width / 2f)
+        playheadHandle.translationX = safeGuideX - (playheadHandle.width / 2f)
 
-        // Sincronización de scroll (el video se mueve bajo la guía)
         if (!isDraggingPlayhead) {
-            val progress = currentMs.toFloat() / totalMs.toFloat()
+            val progress = (currentMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
             val globalPixelX = progress * trackWidth
+            val targetScrollX = (timelineContent.paddingStart + globalPixelX - safeGuideX).toInt()
+            val maxScrollX = (timelineContent.width - viewportWidth).coerceAtLeast(0)
 
-            // Calculamos cuánto scroll ocupar para que el progreso coincida con la guía fija
-            val targetScrollX = (globalPixelX - fixedGuideX).toInt()
-
-            timelineScroll.scrollTo(
-                targetScrollX.coerceIn(0, (trackWidth - viewportWidth).coerceAtLeast(0)),
-                0
-            )
+            timelineScroll.scrollTo(targetScrollX.coerceIn(0, maxScrollX), 0)
         }
 
-        // Aseguramos visibilidad
         if (playhead.visibility != View.VISIBLE) playhead.visibility = View.VISIBLE
         if (playheadHandle.visibility != View.VISIBLE) playheadHandle.visibility = View.VISIBLE
 

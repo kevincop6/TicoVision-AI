@@ -481,10 +481,11 @@ class TimelineRenderer(
     private fun updateTimelineContentWidth(actualTrackWidth: Int) {
         // Obtenemos el ancho de la pantalla (viewport)
         val scrollWidth = binding.timelineScroll.width
+        if (scrollWidth <= 0) return
 
         // Según tu TimelineSeekHelper, la guía está en 48dp.
         // Debemos convertir eso a píxeles para que el paddingStart sea exacto.
-        val guideOffsetPx = 20.dp(context)
+        val guideOffsetPx = VideoEditorConfig.TIMELINE_GUIDE_OFFSET_DP.dp(context)
 
         binding.timelineContent.post {
             binding.timelineContent.setPadding(
